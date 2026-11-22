@@ -2,6 +2,7 @@ package com.ktsms.app.kt_sms
 
 import android.content.ContentValues
 import android.net.Uri
+import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
 import io.flutter.embedding.android.FlutterActivity
@@ -62,6 +63,40 @@ class MainActivity : FlutterActivity() {
                         result.success(messages)
                     } catch (e: Exception) {
                         result.error("SMS_READ_ERROR", e.message, null)
+                    }
+                }
+                "getContacts" -> {
+                    try {
+                        val contacts = mutableMapOf<String, String>()
+                        val cursor = contentResolver.query(
+                            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                            arrayOf(
+                                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                            ),
+                            null,
+                            null,
+                            null
+                        )
+
+                        cursor?.use {
+                            val numCol = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                            val nameCol = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                            while (it.moveToNext()) {
+                                val number = it.getString(numCol)?.replace(Regex("[^0-9+]"), "") ?: ""
+                                val name = it.getString(nameCol) ?: ""
+                                if (number.isNotEmpty() && name.isNotEmpty()) {
+                                    contacts[number] = name
+                                    // Also store last 10 digits for matching
+                                    if (number.length >= 10) {
+                                        contacts[number.takeLast(10)] = name
+                                    }
+                                }
+                            }
+                        }
+                        result.success(contacts)
+                    } catch (e: Exception) {
+                        result.error("CONTACTS_READ_ERROR", e.message, null)
                     }
                 }
                 "sendSms" -> {

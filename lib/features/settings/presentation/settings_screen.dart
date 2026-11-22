@@ -3,12 +3,46 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/backup_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  String _selectedAppIcon = 'Default';
+  final List<String> _iconOptions = ['Default', 'Crimson Red', 'Classic Blue', 'Dark Minimal'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppIconPreference();
+  }
+
+  Future<void> _loadAppIconPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _selectedAppIcon = prefs.getString('pref_app_icon') ?? 'Default';
+    });
+  }
+
+  Future<void> _saveAppIconPreference(String icon) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pref_app_icon', icon);
+    setState(() {
+      _selectedAppIcon = icon;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('App icon style updated to: $icon')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeSettings = ref.watch(themeProvider);
     final themeNotifier = ref.read(themeProvider.notifier);
     final theme = Theme.of(context);
@@ -20,7 +54,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Appearance', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
+          Text('Appearance & Branding', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
           const SizedBox(height: 8),
           Card(
             child: Column(
@@ -54,6 +88,23 @@ class SettingsScreen extends ConsumerWidget {
                       return DropdownMenuItem(
                         value: color,
                         child: Text(color.name),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('App Icon Style'),
+                  subtitle: Text(_selectedAppIcon),
+                  trailing: DropdownButton<String>(
+                    value: _selectedAppIcon,
+                    onChanged: (icon) {
+                      if (icon != null) _saveAppIconPreference(icon);
+                    },
+                    items: _iconOptions.map((icon) {
+                      return DropdownMenuItem(
+                        value: icon,
+                        child: Text(icon),
                       );
                     }).toList(),
                   ),

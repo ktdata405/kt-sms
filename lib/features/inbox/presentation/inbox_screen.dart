@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/native/sms_channel.dart';
+import '../../../core/services/sms_classifier.dart';
 import '../../conversation/presentation/conversation_screen.dart';
 import 'package:intl/intl.dart';
 
@@ -22,7 +23,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     'Transactions',
     'OTPs',
     'Promotions',
-    'Spam'
+    'Bills'
   ];
 
   bool _isLoading = true;
@@ -41,13 +42,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
       _errorMessage = null;
     });
 
-    final status = await Permission.sms.status;
-    if (!status.isGranted) {
-      final result = await Permission.sms.request();
-      if (!result.isGranted) {
+    final smsStatus = await Permission.sms.status;
+    final contactsStatus = await Permission.contacts.status;
+
+    if (!smsStatus.isGranted || !contactsStatus.isGranted) {
+      final statuses = await [Permission.sms, Permission.contacts].request();
+      if (statuses[Permission.sms]?.isGranted != true) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'SMS permission is required to view messages.';
+          _errorMessage = 'SMS and Contacts permissions are required.';
         });
         return;
       }
@@ -71,12 +74,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Filter messages based on _selectedFilter
+    // Strict filter mapping
     final filteredMessages = _messages.where((msg) {
       if (_selectedFilter == 'All') return true;
       if (_selectedFilter == 'Unread') return !msg.read;
-      // Other categories can be classified or simulated
-      return true;
+      if (_selectedFilter == 'Starred') return false; // Starred implementation can be toggled
+
+      final classified = SmsClassifier.classify(msg.address, msg.body);
+      return classified.category == _selectedFilter;
     }).toList();
 
     return Scaffold(
@@ -135,22 +140,24 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                         const SizedBox(height: 16),
                         FilledButton(
                           onPressed: _loadSmsInbox,
-                          child: const Text('Grant Permission & Retry'),
+                          child: const Text('Grant Permissions & Retry'),
                         ),
                       ],
                     ),
                   ),
                 )
               : filteredMessages.isEmpty
-                  ? const Center(child: Text('No messages found.'))
+                  ? const Center(child: Text('No messages found in this category.'))
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: filteredMessages.length,
                       itemBuilder: (context, index) {
                         final msg = filteredMessages[index];
+                        final displayName = msg.contactName ?? msg.address;
                         final dateStr = DateFormat('MMM d, h:mm a').format(
                           DateTime.fromMillisecondsSinceEpoch(msg.date),
                         );
+                        final classified = SmsClassifier.classify(msg.address, msg.body);
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -159,35 +166,49 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                             leading: CircleAvatar(
                               backgroundColor: theme.colorScheme.primaryContainer,
                               foregroundColor: theme.colorScheme.onPrimaryContainer,
-                              child: Text(msg.address.isNotEmpty ? msg.address[0].toUpperCase() : '?'),
+                              child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?'),
                             ),
                             title: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
                                   child: Text(
-                                    msg.address,
+                                    displayName,
                                     style: TextStyle(
                                       fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                Text(
-                                  dateStr,
-                                  style: theme.textTheme.bodySmall,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    classified.category,
+                                    style: TextStyle(fontSize: 10, color: theme.colorScheme.onSecondaryContainer),
+                                  ),
                                 ),
                               ],
                             ),
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                msg.body,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    msg.body,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(dateStr, style: theme.textTheme.bodySmall),
+                                ],
                               ),
                             ),
                             trailing: Icon(
@@ -211,7 +232,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Open compose screen
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => const ConversationScreen(address: '', initialBody: ''),

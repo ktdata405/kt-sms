@@ -13,6 +13,7 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   bool _isLoading = true;
+  bool _isAmountVisible = false; // Default hide
   List<Map<String, dynamic>> _transactions = [];
   double _totalSpent = 0.0;
   double _totalCredited = 0.0;
@@ -43,7 +44,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           }
 
           txs.add({
-            'address': msg.address,
+            'address': msg.contactName ?? msg.address,
             'body': msg.body,
             'amount': classified.amount,
             'isDebit': isDebit,
@@ -63,15 +64,29 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
   }
 
+  String _formatLakh(double amount) {
+    if (!_isAmountVisible) return 'Rs. ••••••';
+    final formatter = NumberFormat('#,##,##0.00', 'en_IN');
+    return 'Rs. ${formatter.format(amount)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final currencyFormat = NumberFormat.currency(symbol: '\$');
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions & Expenses'),
         actions: [
+          IconButton(
+            icon: Icon(_isAmountVisible ? Icons.visibility : Icons.visibility_off),
+            onPressed: () {
+              setState(() {
+                _isAmountVisible = !_isAmountVisible;
+              });
+            },
+            tooltip: _isAmountVisible ? 'Hide Amounts' : 'Show Amounts',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadTransactions,
@@ -89,10 +104,23 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Extracted Expenses Summary', style: theme.textTheme.titleMedium),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Extracted Expenses Summary (INR)', style: theme.textTheme.titleMedium),
+                            IconButton(
+                              icon: Icon(_isAmountVisible ? Icons.visibility : Icons.visibility_off, size: 20),
+                              onPressed: () {
+                                setState(() {
+                                  _isAmountVisible = !_isAmountVisible;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         Text(
-                          currencyFormat.format(_totalSpent),
+                          _formatLakh(_totalSpent),
                           style: theme.textTheme.headlineLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -106,14 +134,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Credited', style: TextStyle(color: Colors.green)),
-                                Text(currencyFormat.format(_totalCredited), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(_formatLakh(_totalCredited), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 const Text('Debited', style: TextStyle(color: Colors.red)),
-                                Text(currencyFormat.format(_totalSpent), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(_formatLakh(_totalSpent), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ],
@@ -158,7 +186,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           ],
                         ),
                         trailing: Text(
-                          '${isDebit ? '-' : '+'}${currencyFormat.format(amount)}',
+                          '${isDebit ? '-' : '+'}${_formatLakh(amount)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: isDebit ? Colors.red : Colors.green,
