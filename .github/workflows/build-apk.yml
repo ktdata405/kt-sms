@@ -218,7 +218,7 @@ jobs:
         with:
           server_address: ${{ env.SMTP_SERVER }}
           server_port: ${{ env.SMTP_PORT }}
-          secure: true
+          secure: ${{ env.SMTP_SECURE }}
           username: ${{ env.MAIL_USERNAME }}
           password: ${{ env.MAIL_PASSWORD }}
           subject: "KT Apps - APK (#${{ github.run_number }}) - with attachments"
@@ -261,7 +261,7 @@ jobs:
         with:
           server_address: ${{ env.SMTP_SERVER }}
           server_port: ${{ env.SMTP_PORT }}
-          secure: true
+          secure: ${{ env.SMTP_SECURE }}
           username: ${{ env.MAIL_USERNAME }}
           password: ${{ env.MAIL_PASSWORD }}
           subject: "KT SMS - APK (#${{ github.run_number }})"
