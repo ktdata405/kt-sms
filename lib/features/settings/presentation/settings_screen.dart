@@ -14,7 +14,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _selectedAppIcon = 'Default';
-  final List<String> _iconOptions = ['Default', 'Crimson Red', 'Classic Blue', 'Dark Minimal'];
+  final List<String> _iconOptions = [
+    'Default',
+    'Crimson Red',
+    'Classic Blue',
+    'Dark Minimal',
+  ];
 
   @override
   void initState() {
@@ -36,9 +41,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _selectedAppIcon = icon;
     });
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('App icon style updated to: $icon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('App icon style updated to: $icon')));
   }
 
   @override
@@ -48,13 +53,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Appearance & Branding', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
+          Text(
+            'Appearance & Branding',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
           const SizedBox(height: 8),
           Card(
             child: Column(
@@ -67,12 +75,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onChanged: (mode) {
                       if (mode != null) themeNotifier.setThemeMode(mode);
                     },
-                    items: AppThemeMode.values.map((mode) {
-                      return DropdownMenuItem(
-                        value: mode,
-                        child: Text(mode.name.toUpperCase()),
-                      );
-                    }).toList(),
+                    items:
+                        AppThemeMode.values.map((mode) {
+                          return DropdownMenuItem(
+                            value: mode,
+                            child: Text(mode.name.toUpperCase()),
+                          );
+                        }).toList(),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('UI Style'),
+                  subtitle: Text(
+                    themeSettings.uiStyle == AppUiStyle.clearSms
+                        ? 'Clear SMS'
+                        : 'Org',
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: SegmentedButton<AppUiStyle>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<AppUiStyle>(
+                        value: AppUiStyle.clearSms,
+                        label: Text('Clear SMS'),
+                      ),
+                      ButtonSegment<AppUiStyle>(
+                        value: AppUiStyle.organizer,
+                        label: Text('Org'),
+                      ),
+                    ],
+                    selected: {themeSettings.uiStyle},
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        themeNotifier.setUiStyle(selection.first);
+                      }
+                    },
                   ),
                 ),
                 const Divider(height: 1),
@@ -84,12 +124,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onChanged: (color) {
                       if (color != null) themeNotifier.setColorTheme(color);
                     },
-                    items: AppColorTheme.values.map((color) {
-                      return DropdownMenuItem(
-                        value: color,
-                        child: Text(color.name),
-                      );
-                    }).toList(),
+                    items:
+                        AppColorTheme.values.map((color) {
+                          return DropdownMenuItem(
+                            value: color,
+                            child: Text(color.name),
+                          );
+                        }).toList(),
                   ),
                 ),
                 const Divider(height: 1),
@@ -101,12 +142,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onChanged: (icon) {
                       if (icon != null) _saveAppIconPreference(icon);
                     },
-                    items: _iconOptions.map((icon) {
-                      return DropdownMenuItem(
-                        value: icon,
-                        child: Text(icon),
-                      );
-                    }).toList(),
+                    items:
+                        _iconOptions.map((icon) {
+                          return DropdownMenuItem(
+                            value: icon,
+                            child: Text(icon),
+                          );
+                        }).toList(),
                   ),
                 ),
                 const Divider(height: 1),
@@ -118,26 +160,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onChanged: (size) {
                       if (size != null) themeNotifier.setFontSize(size);
                     },
-                    items: AppFontSize.values.map((size) {
-                      return DropdownMenuItem(
-                        value: size,
-                        child: Text(size.name.toUpperCase()),
-                      );
-                    }).toList(),
+                    items:
+                        AppFontSize.values.map((size) {
+                          return DropdownMenuItem(
+                            value: size,
+                            child: Text(size.name.toUpperCase()),
+                          );
+                        }).toList(),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 24),
-          Text('Smart Features & Inbox', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
+          Text(
+            'Smart Features & Inbox',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: [
                 SwitchListTile(
                   title: const Text('Automatic Categorization'),
-                  subtitle: const Text('Sort messages into Personal, Transactions, OTP, Offers'),
+                  subtitle: const Text(
+                    'Sort messages into Personal, Transactions, OTP, Offers',
+                  ),
                   value: true,
                   onChanged: (val) {},
                 ),
@@ -159,14 +209,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Privacy & Backup', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
+          Text(
+            'Privacy & Backup',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: [
                 ListTile(
                   title: const Text('App Lock'),
-                  subtitle: const Text('Protect SMS with biometric authentication'),
+                  subtitle: const Text(
+                    'Protect SMS with biometric authentication',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {},
                 ),
@@ -178,33 +235,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onTap: () async {
                     showDialog(
                       context: context,
-                      builder: (dialogContext) => AlertDialog(
-                        title: const Text('Backup & Restore'),
-                        content: const Text('Would you like to create a local backup of your messages and settings?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Cancel'),
+                      builder:
+                          (dialogContext) => AlertDialog(
+                            title: const Text('Backup & Restore'),
+                            content: const Text(
+                              'Would you like to create a local backup of your messages and settings?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dialogContext),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () async {
+                                  Navigator.pop(dialogContext);
+                                  final path =
+                                      await BackupService.createBackup();
+                                  if (!context.mounted) return;
+                                  if (path != null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Backup created successfully at: $path',
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Failed to create backup',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: const Text('Create Backup'),
+                              ),
+                            ],
                           ),
-                          FilledButton(
-                            onPressed: () async {
-                              Navigator.pop(dialogContext);
-                              final path = await BackupService.createBackup();
-                              if (!context.mounted) return;
-                              if (path != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Backup created successfully at: $path')),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Failed to create backup')),
-                                );
-                              }
-                            },
-                            child: const Text('Create Backup'),
-                          ),
-                        ],
-                      ),
                     );
                   },
                 ),
@@ -212,15 +281,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('About', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary)),
+          Text(
+            'About',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
           const SizedBox(height: 8),
           const Card(
             child: Column(
               children: [
-                ListTile(
-                  title: Text('Version'),
-                  trailing: Text('1.0.0+1'),
-                ),
+                ListTile(title: Text('Version'), trailing: Text('1.0.0+1')),
                 Divider(height: 1),
                 ListTile(
                   title: Text('Microsoft SMS Organizer Inspired'),

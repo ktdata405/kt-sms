@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 enum AppThemeMode { light, dark, amoled, system }
 
+enum AppUiStyle { organizer, clearSms }
+
 enum AppColorTheme {
   microsoftBlue,
   royalBlue,
@@ -56,7 +58,11 @@ class AppTheme {
     }
   }
 
-  static ThemeData lightTheme(AppColorTheme colorTheme, AppFontSize fontSize) {
+  static ThemeData lightTheme(
+    AppColorTheme colorTheme,
+    AppFontSize fontSize, {
+    AppUiStyle uiStyle = AppUiStyle.organizer,
+  }) {
     final primary = getPrimaryColor(colorTheme);
     final scale = getScaleFactor(fontSize);
 
@@ -84,12 +90,18 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      textTheme: _scaledTextTheme(base.textTheme, scale),
+    return _applyUiStyle(
+      base.copyWith(textTheme: _scaledTextTheme(base.textTheme, scale)),
+      uiStyle,
+      isDark: false,
     );
   }
 
-  static ThemeData darkTheme(AppColorTheme colorTheme, AppFontSize fontSize) {
+  static ThemeData darkTheme(
+    AppColorTheme colorTheme,
+    AppFontSize fontSize, {
+    AppUiStyle uiStyle = AppUiStyle.organizer,
+  }) {
     final primary = getPrimaryColor(colorTheme);
     final scale = getScaleFactor(fontSize);
 
@@ -117,12 +129,18 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      textTheme: _scaledTextTheme(base.textTheme, scale),
+    return _applyUiStyle(
+      base.copyWith(textTheme: _scaledTextTheme(base.textTheme, scale)),
+      uiStyle,
+      isDark: true,
     );
   }
 
-  static ThemeData amoledTheme(AppColorTheme colorTheme, AppFontSize fontSize) {
+  static ThemeData amoledTheme(
+    AppColorTheme colorTheme,
+    AppFontSize fontSize, {
+    AppUiStyle uiStyle = AppUiStyle.organizer,
+  }) {
     final primary = getPrimaryColor(colorTheme);
     final scale = getScaleFactor(fontSize);
 
@@ -150,28 +168,159 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      textTheme: _scaledTextTheme(base.textTheme, scale),
+    return _applyUiStyle(
+      base.copyWith(textTheme: _scaledTextTheme(base.textTheme, scale)),
+      uiStyle,
+      isDark: true,
+    );
+  }
+
+  static ThemeData _applyUiStyle(
+    ThemeData theme,
+    AppUiStyle uiStyle, {
+    required bool isDark,
+  }) {
+    if (uiStyle == AppUiStyle.organizer) return theme;
+
+    if (!isDark) {
+      final clearLightScheme = theme.colorScheme.copyWith(
+        primary: const Color(0xFF5B78FF),
+        secondary: const Color(0xFF7D93FF),
+        surface: const Color(0xFFF5F7FF),
+        onSurface: const Color(0xFF111827),
+      );
+
+      return theme.copyWith(
+        colorScheme: clearLightScheme,
+        scaffoldBackgroundColor: const Color(0xFFF5F7FF),
+        appBarTheme: theme.appBarTheme.copyWith(
+          backgroundColor: const Color(0xFFF5F7FF),
+          foregroundColor: const Color(0xFF111827),
+        ),
+      );
+    }
+
+    const clearBg = Color(0xFF070B12);
+    const clearSurface = Color(0xFF151B26);
+    const clearSurfaceHi = Color(0xFF20293A);
+    const clearOutline = Color(0xFF2E3A52);
+    const clearPrimary = Color(0xFFB8C8FF);
+
+    final clearDarkScheme = theme.colorScheme.copyWith(
+      primary: clearPrimary,
+      secondary: const Color(0xFF8EA8FF),
+      tertiary: const Color(0xFFFFCFC6),
+      surface: clearSurface,
+      surfaceContainerHighest: clearSurfaceHi,
+      outline: clearOutline,
+      onPrimary: const Color(0xFF09111F),
+      onSurface: const Color(0xFFF3F5FF),
+    );
+
+    return theme.copyWith(
+      colorScheme: clearDarkScheme,
+      scaffoldBackgroundColor: clearBg,
+      dividerColor: clearOutline.withValues(alpha: 0.75),
+      appBarTheme: theme.appBarTheme.copyWith(
+        backgroundColor: clearBg,
+        foregroundColor: const Color(0xFFF3F5FF),
+      ),
+      cardTheme: theme.cardTheme.copyWith(
+        color: clearSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: clearOutline, width: 1),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: clearBg,
+        indicatorColor: const Color(0xFF2D3C5D),
+        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            color: selected ? clearPrimary : const Color(0xFFB8C1D8),
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          );
+        }),
+      ),
+      chipTheme: theme.chipTheme.copyWith(
+        backgroundColor: clearSurface,
+        selectedColor: const Color(0xFF2D3C5D),
+        checkmarkColor: clearPrimary,
+        side: const BorderSide(color: clearOutline),
+        labelStyle: const TextStyle(color: Color(0xFFE6ECFF)),
+      ),
+      switchTheme: SwitchThemeData(
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+        trackColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected))
+            return const Color(0xFF8EA8FF);
+          return const Color(0xFF3C475E);
+        }),
+        thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected))
+            return const Color(0xFF1B2538);
+          return const Color(0xFF9BA6BE);
+        }),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: Color(0xFF2D3C5D),
+        foregroundColor: Color(0xFFEAF0FF),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: clearSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     );
   }
 
   static TextTheme _scaledTextTheme(TextTheme base, double scale) {
     return base.copyWith(
-      displayLarge: base.displayLarge?.copyWith(fontSize: (base.displayLarge?.fontSize ?? 57) * scale),
-      displayMedium: base.displayMedium?.copyWith(fontSize: (base.displayMedium?.fontSize ?? 45) * scale),
-      displaySmall: base.displaySmall?.copyWith(fontSize: (base.displaySmall?.fontSize ?? 36) * scale),
-      headlineLarge: base.headlineLarge?.copyWith(fontSize: (base.headlineLarge?.fontSize ?? 32) * scale),
-      headlineMedium: base.headlineMedium?.copyWith(fontSize: (base.headlineMedium?.fontSize ?? 28) * scale),
-      headlineSmall: base.headlineSmall?.copyWith(fontSize: (base.headlineSmall?.fontSize ?? 24) * scale),
-      titleLarge: base.titleLarge?.copyWith(fontSize: (base.titleLarge?.fontSize ?? 22) * scale),
-      titleMedium: base.titleMedium?.copyWith(fontSize: (base.titleMedium?.fontSize ?? 16) * scale),
-      titleSmall: base.titleSmall?.copyWith(fontSize: (base.titleSmall?.fontSize ?? 14) * scale),
-      bodyLarge: base.bodyLarge?.copyWith(fontSize: (base.bodyLarge?.fontSize ?? 16) * scale),
-      bodyMedium: base.bodyMedium?.copyWith(fontSize: (base.bodyMedium?.fontSize ?? 14) * scale),
-      bodySmall: base.bodySmall?.copyWith(fontSize: (base.bodySmall?.fontSize ?? 12) * scale),
-      labelLarge: base.labelLarge?.copyWith(fontSize: (base.labelLarge?.fontSize ?? 14) * scale),
-      labelMedium: base.labelMedium?.copyWith(fontSize: (base.labelMedium?.fontSize ?? 12) * scale),
-      labelSmall: base.labelSmall?.copyWith(fontSize: (base.labelSmall?.fontSize ?? 11) * scale),
+      displayLarge: base.displayLarge?.copyWith(
+        fontSize: (base.displayLarge?.fontSize ?? 57) * scale,
+      ),
+      displayMedium: base.displayMedium?.copyWith(
+        fontSize: (base.displayMedium?.fontSize ?? 45) * scale,
+      ),
+      displaySmall: base.displaySmall?.copyWith(
+        fontSize: (base.displaySmall?.fontSize ?? 36) * scale,
+      ),
+      headlineLarge: base.headlineLarge?.copyWith(
+        fontSize: (base.headlineLarge?.fontSize ?? 32) * scale,
+      ),
+      headlineMedium: base.headlineMedium?.copyWith(
+        fontSize: (base.headlineMedium?.fontSize ?? 28) * scale,
+      ),
+      headlineSmall: base.headlineSmall?.copyWith(
+        fontSize: (base.headlineSmall?.fontSize ?? 24) * scale,
+      ),
+      titleLarge: base.titleLarge?.copyWith(
+        fontSize: (base.titleLarge?.fontSize ?? 22) * scale,
+      ),
+      titleMedium: base.titleMedium?.copyWith(
+        fontSize: (base.titleMedium?.fontSize ?? 16) * scale,
+      ),
+      titleSmall: base.titleSmall?.copyWith(
+        fontSize: (base.titleSmall?.fontSize ?? 14) * scale,
+      ),
+      bodyLarge: base.bodyLarge?.copyWith(
+        fontSize: (base.bodyLarge?.fontSize ?? 16) * scale,
+      ),
+      bodyMedium: base.bodyMedium?.copyWith(
+        fontSize: (base.bodyMedium?.fontSize ?? 14) * scale,
+      ),
+      bodySmall: base.bodySmall?.copyWith(
+        fontSize: (base.bodySmall?.fontSize ?? 12) * scale,
+      ),
+      labelLarge: base.labelLarge?.copyWith(
+        fontSize: (base.labelLarge?.fontSize ?? 14) * scale,
+      ),
+      labelMedium: base.labelMedium?.copyWith(
+        fontSize: (base.labelMedium?.fontSize ?? 12) * scale,
+      ),
+      labelSmall: base.labelSmall?.copyWith(
+        fontSize: (base.labelSmall?.fontSize ?? 11) * scale,
+      ),
     );
   }
 }

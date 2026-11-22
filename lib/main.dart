@@ -8,11 +8,7 @@ import 'core/services/notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.initialize();
-  runApp(
-    const ProviderScope(
-      child: KtSmsApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: KtSmsApp()));
 }
 
 class KtSmsApp extends ConsumerWidget {
@@ -42,10 +38,23 @@ class KtSmsApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'KT - SMS Organizer',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(themeSettings.colorTheme, themeSettings.fontSize),
-      darkTheme: themeSettings.themeMode == AppThemeMode.amoled
-          ? AppTheme.amoledTheme(themeSettings.colorTheme, themeSettings.fontSize)
-          : AppTheme.darkTheme(themeSettings.colorTheme, themeSettings.fontSize),
+      theme: AppTheme.lightTheme(
+        themeSettings.colorTheme,
+        themeSettings.fontSize,
+        uiStyle: themeSettings.uiStyle,
+      ),
+      darkTheme:
+          themeSettings.themeMode == AppThemeMode.amoled
+              ? AppTheme.amoledTheme(
+                themeSettings.colorTheme,
+                themeSettings.fontSize,
+                uiStyle: themeSettings.uiStyle,
+              )
+              : AppTheme.darkTheme(
+                themeSettings.colorTheme,
+                themeSettings.fontSize,
+                uiStyle: themeSettings.uiStyle,
+              ),
       themeMode: mode,
       routerConfig: router,
     );

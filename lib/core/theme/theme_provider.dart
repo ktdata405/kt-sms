@@ -4,22 +4,26 @@ import 'app_theme.dart';
 
 class ThemeSettings {
   final AppThemeMode themeMode;
+  final AppUiStyle uiStyle;
   final AppColorTheme colorTheme;
   final AppFontSize fontSize;
 
   ThemeSettings({
     required this.themeMode,
+    required this.uiStyle,
     required this.colorTheme,
     required this.fontSize,
   });
 
   ThemeSettings copyWith({
     AppThemeMode? themeMode,
+    AppUiStyle? uiStyle,
     AppColorTheme? colorTheme,
     AppFontSize? fontSize,
   }) {
     return ThemeSettings(
       themeMode: themeMode ?? this.themeMode,
+      uiStyle: uiStyle ?? this.uiStyle,
       colorTheme: colorTheme ?? this.colorTheme,
       fontSize: fontSize ?? this.fontSize,
     );
@@ -28,17 +32,19 @@ class ThemeSettings {
 
 class ThemeNotifier extends StateNotifier<ThemeSettings> {
   ThemeNotifier()
-      : super(
-          ThemeSettings(
-            themeMode: AppThemeMode.system,
-            colorTheme: AppColorTheme.microsoftBlue,
-            fontSize: AppFontSize.medium,
-          ),
-        ) {
+    : super(
+        ThemeSettings(
+          themeMode: AppThemeMode.system,
+          uiStyle: AppUiStyle.organizer,
+          colorTheme: AppColorTheme.microsoftBlue,
+          fontSize: AppFontSize.medium,
+        ),
+      ) {
     _loadPreferences();
   }
 
   static const String _kThemeModeKey = 'pref_theme_mode';
+  static const String _kUiStyleKey = 'pref_ui_style';
   static const String _kColorThemeKey = 'pref_color_theme';
   static const String _kFontSizeKey = 'pref_font_size';
 
@@ -46,13 +52,27 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
     final prefs = await SharedPreferences.getInstance();
 
     final modeIndex = prefs.getInt(_kThemeModeKey);
+    final styleIndex = prefs.getInt(_kUiStyleKey);
     final colorIndex = prefs.getInt(_kColorThemeKey);
     final fontIndex = prefs.getInt(_kFontSizeKey);
 
     state = ThemeSettings(
-      themeMode: modeIndex != null ? AppThemeMode.values[modeIndex] : AppThemeMode.system,
-      colorTheme: colorIndex != null ? AppColorTheme.values[colorIndex] : AppColorTheme.microsoftBlue,
-      fontSize: fontIndex != null ? AppFontSize.values[fontIndex] : AppFontSize.medium,
+      themeMode:
+          modeIndex != null
+              ? AppThemeMode.values[modeIndex]
+              : AppThemeMode.system,
+      uiStyle:
+          styleIndex != null
+              ? AppUiStyle.values[styleIndex]
+              : AppUiStyle.organizer,
+      colorTheme:
+          colorIndex != null
+              ? AppColorTheme.values[colorIndex]
+              : AppColorTheme.microsoftBlue,
+      fontSize:
+          fontIndex != null
+              ? AppFontSize.values[fontIndex]
+              : AppFontSize.medium,
     );
   }
 
@@ -60,6 +80,12 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
     state = state.copyWith(themeMode: mode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kThemeModeKey, mode.index);
+  }
+
+  Future<void> setUiStyle(AppUiStyle uiStyle) async {
+    state = state.copyWith(uiStyle: uiStyle);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kUiStyleKey, uiStyle.index);
   }
 
   Future<void> setColorTheme(AppColorTheme colorTheme) async {
@@ -75,6 +101,8 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
   }
 }
 
-final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeSettings>((ref) {
+final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeSettings>((
+  ref,
+) {
   return ThemeNotifier();
 });
