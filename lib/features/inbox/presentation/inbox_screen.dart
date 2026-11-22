@@ -6,6 +6,24 @@ import '../../../core/services/sms_classifier.dart';
 import '../../conversation/presentation/conversation_screen.dart';
 import 'package:intl/intl.dart';
 
+class ConversationThreadModel {
+  final String address;
+  final String contactName;
+  final List<SmsMessageModel> messages;
+  final SmsMessageModel latestMessage;
+  final int unreadCount;
+  final String category;
+
+  ConversationThreadModel({
+    required this.address,
+    required this.contactName,
+    required this.messages,
+    required this.latestMessage,
+    required this.unreadCount,
+    required this.category,
+  });
+}
+
 class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
 
@@ -28,7 +46,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
   bool _isLoading = true;
   bool _isDefaultSms = true;
-  List<SmsMessageModel> _messages = [];
+  List<ConversationThreadModel> _threads = [];
   String? _errorMessage;
 
   @override
@@ -67,8 +85,37 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
     try {
       final messages = await SmsChannel.getSmsMessages();
+
+      // Group messages by sender address
+      final Map<String, List<SmsMessageModel>> grouped = {};
+      for (var msg in messages) {
+        final key = msg.address.trim();
+        grouped.putIfAbsent(key, () => []).add(msg);
+      }
+
+      final List<ConversationThreadModel> threads = [];
+      grouped.forEach((address, msgs) {
+        msgs.sort((a, b) => b.date.compareTo(a.date)); // Latest first
+        final latest = msgs.first;
+        final unread = msgs.where((m) => !m.read).length;
+        final contact = latest.contactName ?? address;
+        final classified = SmsClassifier.classify(address, latest.body);
+
+        threads.add(ConversationThreadModel(
+          address: address,
+          contactName: contact,
+          messages: msgs,
+          latestMessage: latest,
+          unreadCount: unread,
+          category: classified.category,
+        ));
+      });
+
+      // Sort threads by latest message date
+      threads.sort((a, b) => b.latestMessage.date.compareTo(a.latestMessage.date));
+
       setState(() {
-        _messages = messages;
+        _threads = threads;
         _isLoading = false;
       });
     } catch (e) {
@@ -83,13 +130,12 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final filteredMessages = _messages.where((msg) {
+    // Filter threads based on _selectedFilter
+    final filteredThreads = _threads.where((thread) {
       if (_selectedFilter == 'All') return true;
-      if (_selectedFilter == 'Unread') return !msg.read;
+      if (_selectedFilter == 'Unread') return thread.unreadCount > 0;
       if (_selectedFilter == 'Starred') return false;
-
-      final classified = SmsClassifier.classify(msg.address, msg.body);
-      return classified.category == _selectedFilter;
+      return thread.category == _selectedFilter;
     }).toList();
 
     return Scaffold(
@@ -182,18 +228,16 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                           ),
                         ),
                       )
-                    : filteredMessages.isEmpty
-                        ? const Center(child: Text('No messages found in this category.'))
+                    : filteredThreads.isEmpty
+                        ? const Center(child: Text('No conversations found in this category.'))
                         : ListView.builder(
                             padding: const EdgeInsets.all(16),
-                            itemCount: filteredMessages.length,
+                            itemCount: filteredThreads.length,
                             itemBuilder: (context, index) {
-                              final msg = filteredMessages[index];
-                              final displayName = msg.contactName ?? msg.address;
+                              final thread = filteredThreads[index];
                               final dateStr = DateFormat('MMM d, h:mm a').format(
-                                DateTime.fromMillisecondsSinceEpoch(msg.date),
+                                DateTime.fromMillisecondsSinceEpoch(thread.latestMessage.date),
                               );
-                              final classified = SmsClassifier.classify(msg.address, msg.body);
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -202,16 +246,16 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                                   leading: CircleAvatar(
                                     backgroundColor: theme.colorScheme.primaryContainer,
                                     foregroundColor: theme.colorScheme.onPrimaryContainer,
-                                    child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?'),
+                                    child: Text(thread.contactName.isNotEmpty ? thread.contactName[0].toUpperCase() : '?'),
                                   ),
                                   title: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          displayName,
+                                          thread.contactName,
                                           style: TextStyle(
-                                            fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
+                                            fontWeight: thread.unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -223,7 +267,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: Text(
-                                          classified.category,
+                                          thread.category,
                                           style: TextStyle(fontSize: 10, color: theme.colorScheme.onSecondaryContainer),
                                         ),
                                       ),
@@ -235,11 +279,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          msg.body,
+                                          thread.latestMessage.body,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
+                                            fontWeight: thread.unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -247,17 +291,18 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                                       ],
                                     ),
                                   ),
-                                  trailing: Icon(
-                                    msg.read ? Icons.done_all : Icons.circle,
-                                    size: msg.read ? 20 : 12,
-                                    color: msg.read ? theme.colorScheme.primary : theme.colorScheme.error,
-                                  ),
+                                  trailing: thread.unreadCount > 0
+                                      ? Badge(
+                                          label: Text('${thread.unreadCount}'),
+                                          child: const Icon(Icons.chat_bubble_outline),
+                                        )
+                                      : const Icon(Icons.chevron_right),
                                   onTap: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (context) => ConversationScreen(
-                                          address: msg.address,
-                                          initialBody: msg.body,
+                                          address: thread.address,
+                                          initialBody: thread.latestMessage.body,
                                         ),
                                       ),
                                     );
