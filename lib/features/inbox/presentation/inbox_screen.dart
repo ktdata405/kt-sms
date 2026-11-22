@@ -31,7 +31,8 @@ class InboxScreen extends ConsumerStatefulWidget {
   ConsumerState<InboxScreen> createState() => _InboxScreenState();
 }
 
-class _InboxScreenState extends ConsumerState<InboxScreen> {
+class _InboxScreenState extends ConsumerState<InboxScreen>
+    with WidgetsBindingObserver {
   String _selectedFilter = 'All';
   final List<String> _filters = [
     'All',
@@ -41,7 +42,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     'Transactions',
     'OTPs',
     'Promotions',
-    'Bills'
+    'Bills',
   ];
 
   bool _isLoading = true;
@@ -52,15 +53,43 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkDefaultSms();
     _loadSmsInbox();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkDefaultSms();
+    }
+  }
+
   Future<void> _checkDefaultSms() async {
     final isDefault = await SmsChannel.isDefaultSmsApp();
+    if (!mounted) return;
     setState(() {
       _isDefaultSms = isDefault;
     });
+  }
+
+  Future<void> _requestDefaultAndRefresh() async {
+    await SmsChannel.requestDefaultSmsApp();
+    for (int i = 0; i < 6; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      final isDefault = await SmsChannel.isDefaultSmsApp();
+      if (!mounted) return;
+      setState(() {
+        _isDefaultSms = isDefault;
+      });
+      if (isDefault) break;
+    }
   }
 
   Future<void> _loadSmsInbox() async {
@@ -101,18 +130,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         final contact = latest.contactName ?? address;
         final classified = SmsClassifier.classify(address, latest.body);
 
-        threads.add(ConversationThreadModel(
-          address: address,
-          contactName: contact,
-          messages: msgs,
-          latestMessage: latest,
-          unreadCount: unread,
-          category: classified.category,
-        ));
+        threads.add(
+          ConversationThreadModel(
+            address: address,
+            contactName: contact,
+            messages: msgs,
+            latestMessage: latest,
+            unreadCount: unread,
+            category: classified.category,
+          ),
+        );
       });
 
       // Sort threads by latest message date
-      threads.sort((a, b) => b.latestMessage.date.compareTo(a.latestMessage.date));
+      threads.sort(
+        (a, b) => b.latestMessage.date.compareTo(a.latestMessage.date),
+      );
 
       setState(() {
         _threads = threads;
@@ -131,12 +164,13 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     final theme = Theme.of(context);
 
     // Filter threads based on _selectedFilter
-    final filteredThreads = _threads.where((thread) {
-      if (_selectedFilter == 'All') return true;
-      if (_selectedFilter == 'Unread') return thread.unreadCount > 0;
-      if (_selectedFilter == 'Starred') return false;
-      return thread.category == _selectedFilter;
-    }).toList();
+    final filteredThreads =
+        _threads.where((thread) {
+          if (_selectedFilter == 'All') return true;
+          if (_selectedFilter == 'Unread') return thread.unreadCount > 0;
+          if (_selectedFilter == 'Starred') return false;
+          return thread.category == _selectedFilter;
+        }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -150,10 +184,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             },
             tooltip: 'Refresh SMS',
           ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
@@ -161,21 +192,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
-              children: _filters.map((filter) {
-                final isSelected = _selectedFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedFilter = filter;
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
+              children:
+                  _filters.map((filter) {
+                    final isSelected = _selectedFilter == filter;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(filter),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedFilter = filter;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
         ),
@@ -188,18 +220,23 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: theme.colorScheme.onErrorContainer),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'KT-SMS is not your default SMS app.',
-                      style: TextStyle(color: theme.colorScheme.onErrorContainer, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: theme.colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   FilledButton.tonal(
                     onPressed: () async {
-                      await SmsChannel.requestDefaultSmsApp();
-                      await _checkDefaultSms();
+                      await _requestDefaultAndRefresh();
                     },
                     child: const Text('Set as Default'),
                   ),
@@ -207,110 +244,147 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
             ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage != null
+            child:
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _errorMessage != null
                     ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
-                              const SizedBox(height: 16),
-                              Text(_errorMessage!, textAlign: TextAlign.center),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: _loadSmsInbox,
-                                child: const Text('Grant Permissions & Retry'),
-                              ),
-                            ],
-                          ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: theme.colorScheme.error,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(_errorMessage!, textAlign: TextAlign.center),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: _loadSmsInbox,
+                              child: const Text('Grant Permissions & Retry'),
+                            ),
+                          ],
                         ),
-                      )
+                      ),
+                    )
                     : filteredThreads.isEmpty
-                        ? const Center(child: Text('No conversations found in this category.'))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: filteredThreads.length,
-                            itemBuilder: (context, index) {
-                              final thread = filteredThreads[index];
-                              final dateStr = DateFormat('MMM d, h:mm a').format(
-                                DateTime.fromMillisecondsSinceEpoch(thread.latestMessage.date),
-                              );
+                    ? const Center(
+                      child: Text('No conversations found in this category.'),
+                    )
+                    : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filteredThreads.length,
+                      itemBuilder: (context, index) {
+                        final thread = filteredThreads[index];
+                        final dateStr = DateFormat('MMM d, h:mm a').format(
+                          DateTime.fromMillisecondsSinceEpoch(
+                            thread.latestMessage.date,
+                          ),
+                        );
 
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                child: ListTile(
-                                  contentPadding: const EdgeInsets.all(16),
-                                  leading: CircleAvatar(
-                                    backgroundColor: theme.colorScheme.primaryContainer,
-                                    foregroundColor: theme.colorScheme.onPrimaryContainer,
-                                    child: Text(thread.contactName.isNotEmpty ? thread.contactName[0].toUpperCase() : '?'),
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  theme.colorScheme.primaryContainer,
+                              foregroundColor:
+                                  theme.colorScheme.onPrimaryContainer,
+                              child: Text(
+                                thread.contactName.isNotEmpty
+                                    ? thread.contactName[0].toUpperCase()
+                                    : '?',
+                              ),
+                            ),
+                            title: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    thread.contactName,
+                                    style: TextStyle(
+                                      fontWeight:
+                                          thread.unreadCount > 0
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  title: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          thread.contactName,
-                                          style: TextStyle(
-                                            fontWeight: thread.unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.secondaryContainer,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          thread.category,
-                                          style: TextStyle(fontSize: 10, color: theme.colorScheme.onSecondaryContainer),
-                                        ),
-                                      ),
-                                    ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
                                   ),
-                                  subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          thread.latestMessage.body,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontWeight: thread.unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(dateStr, style: theme.textTheme.bodySmall),
-                                      ],
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    thread.category,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color:
+                                          theme
+                                              .colorScheme
+                                              .onSecondaryContainer,
                                     ),
                                   ),
-                                  trailing: thread.unreadCount > 0
-                                      ? Badge(
-                                          label: Text('${thread.unreadCount}'),
-                                          child: const Icon(Icons.chat_bubble_outline),
-                                        )
-                                      : const Icon(Icons.chevron_right),
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => ConversationScreen(
-                                          address: thread.address,
-                                          initialBody: thread.latestMessage.body,
-                                        ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    thread.latestMessage.body,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight:
+                                          thread.unreadCount > 0
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    dateStr,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            trailing:
+                                thread.unreadCount > 0
+                                    ? Badge(
+                                      label: Text('${thread.unreadCount}'),
+                                      child: const Icon(
+                                        Icons.chat_bubble_outline,
                                       ),
-                                    );
-                                  },
+                                    )
+                                    : const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => ConversationScreen(
+                                        address: thread.address,
+                                        initialBody: thread.latestMessage.body,
+                                      ),
                                 ),
                               );
                             },
                           ),
+                        );
+                      },
+                    ),
           ),
         ],
       ),
@@ -318,7 +392,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => const ConversationScreen(address: '', initialBody: ''),
+              builder:
+                  (context) =>
+                      const ConversationScreen(address: '', initialBody: ''),
             ),
           );
         },
