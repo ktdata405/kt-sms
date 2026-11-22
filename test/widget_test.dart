@@ -14,7 +14,6 @@ void main() {
     expect(find.text('Inbox'), findsAtLeastNWidgets(1));
     expect(find.text('Transactions'), findsAtLeastNWidgets(1));
     expect(find.text('Reminders'), findsAtLeastNWidgets(1));
-    expect(find.text('Offers'), findsAtLeastNWidgets(1));
     expect(find.text('Settings'), findsAtLeastNWidgets(1));
   });
 }

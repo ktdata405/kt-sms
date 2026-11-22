@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/native/sms_channel.dart';
 import '../../../core/services/sms_classifier.dart';
 import '../../conversation/presentation/conversation_screen.dart';
@@ -16,20 +17,65 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _reminders = [];
   final NumberFormat _inrFormat = NumberFormat('#,##,##0.00', 'en_IN');
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
+  Set<String> _dismissedReminderKeys = <String>{};
+
+  static const String _dismissedReminderStorageKey = 'dismissed_reminder_keys';
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadReminders();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldShow =
+        _scrollController.hasClients && _scrollController.offset > 280;
+    if (shouldShow != _showScrollToTop) {
+      setState(() => _showScrollToTop = shouldShow);
+    }
+  }
+
+  Future<void> _loadDismissedReminderKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    _dismissedReminderKeys =
+        prefs.getStringList(_dismissedReminderStorageKey)?.toSet() ??
+        <String>{};
+  }
+
+  Future<void> _dismissReminder(String reminderKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final updated = {..._dismissedReminderKeys, reminderKey};
+    await prefs.setStringList(_dismissedReminderStorageKey, updated.toList());
+    if (!mounted) return;
+    setState(() {
+      _dismissedReminderKeys = updated;
+      _reminders.removeWhere((e) => e['reminderKey'] == reminderKey);
+    });
   }
 
   Future<void> _loadReminders() async {
     setState(() => _isLoading = true);
     try {
+      await _loadDismissedReminderKeys();
       final messages = await SmsChannel.getSmsMessages();
       final uniqueReminders = <String, Map<String, dynamic>>{};
+      final thirtyDaysAgo =
+          DateTime.now()
+              .subtract(const Duration(days: 30))
+              .millisecondsSinceEpoch;
 
       for (var msg in messages) {
+        if (msg.date < thirtyDaysAgo) continue;
         final classified = SmsClassifier.classify(msg.address, msg.body);
         if (classified.category == 'Bills') {
           final dueDate =
@@ -43,14 +89,17 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
               classified.amount?.toStringAsFixed(2) ?? 'no-amount';
           final dedupeKey =
               '$normalizedSender|$amountKey|${dueDate.year}-${dueDate.month}-${dueDate.day}|${normalizedBody.substring(0, normalizedBody.length > 24 ? 24 : normalizedBody.length)}';
+          if (_dismissedReminderKeys.contains(dedupeKey)) continue;
 
           final current = {
             'address': msg.address,
+            'threadId': msg.threadId,
             'sender': msg.contactName ?? msg.address,
             'body': msg.body,
             'amount': classified.amount,
             'dueDate': dueDate,
             'date': msg.date,
+            'reminderKey': dedupeKey,
           };
 
           final existing = uniqueReminders[dedupeKey];
@@ -97,6 +146,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : ListView(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(16),
                 children: [
                   Text(
@@ -136,20 +186,20 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                   Text(
                                     'Due: $dateStr',
                                     style: TextStyle(
-                                      color: theme.colorScheme.error,
+                                      color: theme.colorScheme.primary,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4),
                               Text(
                                 amount != null
                                     ? 'Amount Due: Rs. ${_inrFormat.format(amount)}'
                                     : 'Bill Payment Reminder',
                                 style: theme.textTheme.titleMedium,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
                                 rem['body'] as String,
                                 style: theme.textTheme.bodySmall,
@@ -168,6 +218,10 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                               (context) => ConversationScreen(
                                                 address:
                                                     rem['address'] as String,
+                                                contactName:
+                                                    rem['sender'] as String,
+                                                threadId:
+                                                    rem['threadId'] as String?,
                                                 initialBody:
                                                     rem['body'] as String,
                                               ),
@@ -176,6 +230,16 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                     },
                                     icon: const Icon(Icons.chat_bubble_outline),
                                     label: const Text('Open Message'),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed:
+                                        () => _dismissReminder(
+                                          rem['reminderKey'] as String,
+                                        ),
+                                    icon: const Icon(
+                                      Icons.visibility_off_outlined,
+                                    ),
+                                    label: const Text('Dismiss'),
                                   ),
                                 ],
                               ),
@@ -186,6 +250,20 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                     }),
                 ],
               ),
+      floatingActionButton:
+          _showScrollToTop
+              ? FloatingActionButton.small(
+                heroTag: 'reminders-top',
+                onPressed: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                  );
+                },
+                child: const Icon(Icons.vertical_align_top),
+              )
+              : null,
     );
   }
 }

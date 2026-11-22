@@ -49,11 +49,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
   bool _isDefaultSms = true;
   List<ConversationThreadModel> _threads = [];
   String? _errorMessage;
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_onScroll);
     _checkDefaultSms();
     _loadSmsInbox();
   }
@@ -61,7 +64,17 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldShow =
+        _scrollController.hasClients && _scrollController.offset > 320;
+    if (shouldShow != _showScrollToTop) {
+      setState(() => _showScrollToTop = shouldShow);
+    }
   }
 
   @override
@@ -72,7 +85,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
   }
 
   Future<void> _checkDefaultSms() async {
-    final isDefault = await SmsChannel.isDefaultSmsApp();
+    var isDefault = await SmsChannel.isDefaultSmsApp();
+    if (!isDefault) {
+      await Future.delayed(const Duration(milliseconds: 350));
+      isDefault = await SmsChannel.isDefaultSmsApp();
+    }
     if (!mounted) return;
     setState(() {
       _isDefaultSms = isDefault;
@@ -81,7 +98,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
 
   Future<void> _requestDefaultAndRefresh() async {
     await SmsChannel.requestDefaultSmsApp();
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 12; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       final isDefault = await SmsChannel.isDefaultSmsApp();
       if (!mounted) return;
@@ -157,6 +174,62 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
         _errorMessage = 'Failed to load SMS messages: $e';
       });
     }
+  }
+
+  Future<void> _markThreadAsRead(ConversationThreadModel thread) async {
+    final changed = await SmsChannel.markThreadAsRead(
+      threadId: thread.latestMessage.threadId,
+      address: thread.address,
+    );
+    if (!mounted || !changed) return;
+    await _loadSmsInbox();
+  }
+
+  Future<void> _openThread(ConversationThreadModel thread) async {
+    if (thread.unreadCount > 0) {
+      await _markThreadAsRead(thread);
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (context) => ConversationScreen(
+              address: thread.address,
+              contactName: thread.contactName,
+              threadId: thread.latestMessage.threadId,
+              initialBody: thread.latestMessage.body,
+            ),
+      ),
+    );
+    if (!mounted) return;
+    await _loadSmsInbox();
+    await _checkDefaultSms();
+  }
+
+  Future<void> _showThreadActions(ConversationThreadModel thread) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.mark_chat_read_outlined),
+                title: const Text('Mark as read'),
+                enabled: thread.unreadCount > 0,
+                onTap:
+                    thread.unreadCount > 0
+                        ? () async {
+                          Navigator.pop(context);
+                          await _markThreadAsRead(thread);
+                        }
+                        : null,
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -275,6 +348,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
                       child: Text('No conversations found in this category.'),
                     )
                     : ListView.builder(
+                      controller: _scrollController,
                       padding: const EdgeInsets.all(16),
                       itemCount: filteredThreads.length,
                       itemBuilder: (context, index) {
@@ -286,9 +360,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
                         );
 
                         return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
+                          margin: const EdgeInsets.only(bottom: 9),
                           child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
+                            contentPadding: const EdgeInsets.all(12),
                             leading: CircleAvatar(
                               backgroundColor:
                                   theme.colorScheme.primaryContainer,
@@ -356,7 +430,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
                                   const SizedBox(height: 4),
                                   Text(
                                     dateStr,
-                                    style: theme.textTheme.bodySmall,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.primary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -370,17 +446,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
                                       ),
                                     )
                                     : const Icon(Icons.chevron_right),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => ConversationScreen(
-                                        address: thread.address,
-                                        initialBody: thread.latestMessage.body,
-                                      ),
-                                ),
-                              );
-                            },
+                            onTap: () => _openThread(thread),
+                            onLongPress: () => _showThreadActions(thread),
                           ),
                         );
                       },
@@ -388,18 +455,40 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder:
-                  (context) =>
-                      const ConversationScreen(address: '', initialBody: ''),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_showScrollToTop)
+            FloatingActionButton.small(
+              heroTag: 'inbox-top',
+              onPressed: () {
+                _scrollController.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                );
+              },
+              child: const Icon(Icons.vertical_align_top),
             ),
-          );
-        },
-        icon: const Icon(Icons.edit),
-        label: const Text('Compose'),
+          if (_showScrollToTop) const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'inbox-compose',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (context) => const ConversationScreen(
+                        address: '',
+                        initialBody: '',
+                      ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.edit),
+            label: const Text('Compose'),
+          ),
+        ],
       ),
     );
   }

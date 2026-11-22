@@ -13,59 +13,27 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.ktsms.app/sms"
+    private val channelName = "com.ktsms.app/sms"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
-                "getSmsMessages" -> {
+                "getSmsMessages" -> result.success(readSmsMessages())
+                "getThreadMessages" -> {
+                    val threadId = call.argument<String>("threadId")
+                    val address = call.argument<String>("address")
+                    result.success(readSmsMessages(threadId = threadId, address = address))
+                }
+                "markThreadAsRead" -> {
                     try {
-                        val messages = mutableListOf<Map<String, Any>>()
-                        val uri = Uri.parse("content://sms")
-                        val cursor = contentResolver.query(
-                            uri,
-                            arrayOf(
-                                Telephony.Sms._ID,
-                                Telephony.Sms.THREAD_ID,
-                                Telephony.Sms.ADDRESS,
-                                Telephony.Sms.BODY,
-                                Telephony.Sms.DATE,
-                                Telephony.Sms.TYPE,
-                                Telephony.Sms.READ,
-                                Telephony.Sms.STATUS
-                            ),
-                            null,
-                            null,
-                            Telephony.Sms.DEFAULT_SORT_ORDER
-                        )
-
-                        cursor?.use {
-                            val idCol = it.getColumnIndex(Telephony.Sms._ID)
-                            val threadCol = it.getColumnIndex(Telephony.Sms.THREAD_ID)
-                            val addressCol = it.getColumnIndex(Telephony.Sms.ADDRESS)
-                            val bodyCol = it.getColumnIndex(Telephony.Sms.BODY)
-                            val dateCol = it.getColumnIndex(Telephony.Sms.DATE)
-                            val typeCol = it.getColumnIndex(Telephony.Sms.TYPE)
-                            val readCol = it.getColumnIndex(Telephony.Sms.READ)
-
-                            while (it.moveToNext()) {
-                                val msg = mapOf(
-                                    "id" to if (idCol >= 0) it.getString(idCol) else "",
-                                    "threadId" to if (threadCol >= 0) it.getString(threadCol) else "",
-                                    "address" to if (addressCol >= 0) (it.getString(addressCol) ?: "Unknown") else "Unknown",
-                                    "body" to if (bodyCol >= 0) (it.getString(bodyCol) ?: "") else "",
-                                    "date" to if (dateCol >= 0) it.getLong(dateCol) else 0L,
-                                    "type" to if (typeCol >= 0) it.getInt(typeCol) else 1,
-                                    "read" to if (readCol >= 0) it.getInt(readCol) == 1 else true
-                                )
-                                messages.add(msg)
-                            }
-                        }
-                        result.success(messages)
+                        val threadId = call.argument<String>("threadId")
+                        val address = call.argument<String>("address")
+                        val rows = markThreadAsRead(threadId = threadId, address = address)
+                        result.success(rows > 0)
                     } catch (e: Exception) {
-                        result.error("SMS_READ_ERROR", e.message, null)
+                        result.error("MARK_READ_ERROR", e.message, null)
                     }
                 }
                 "getContacts" -> {
@@ -90,9 +58,7 @@ class MainActivity : FlutterActivity() {
                                 val name = it.getString(nameCol) ?: ""
                                 if (number.isNotEmpty() && name.isNotEmpty()) {
                                     contacts[number] = name
-                                    if (number.length >= 10) {
-                                        contacts[number.takeLast(10)] = name
-                                    }
+                                    if (number.length >= 10) contacts[number.takeLast(10)] = name
                                 }
                             }
                         }
@@ -104,34 +70,52 @@ class MainActivity : FlutterActivity() {
                 "sendSms" -> {
                     val address = call.argument<String>("address")
                     val body = call.argument<String>("body")
-                    if (address != null && body != null) {
-                        try {
-                            val smsManager = context.getSystemService(SmsManager::class.java)
-                            smsManager.sendTextMessage(address, null, body, null, null)
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("SMS_SEND_ERROR", e.message, null)
-                        }
-                    } else {
+                    if (address.isNullOrBlank() || body.isNullOrBlank()) {
                         result.error("INVALID_ARGUMENTS", "Address and body cannot be null", null)
+                        return@setMethodCallHandler
+                    }
+
+                    try {
+                        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            applicationContext.getSystemService(SmsManager::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            SmsManager.getDefault()
+                        }
+
+                        smsManager?.sendTextMessage(address.trim(), null, body, null, null)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SMS_SEND_ERROR", e.message, null)
                     }
                 }
                 "isDefaultSmsApp" -> {
-                    val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(context)
-                    val isDefault = defaultSmsPackage == packageName
-                    result.success(isDefault)
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val roleManager = getSystemService(RoleManager::class.java)
+                            if (roleManager?.isRoleAvailable(RoleManager.ROLE_SMS) == true) {
+                                result.success(roleManager.isRoleHeld(RoleManager.ROLE_SMS))
+                                return@setMethodCallHandler
+                            }
+                        }
+
+                        val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(applicationContext)
+                        result.success(defaultSmsPackage == packageName)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
                 }
                 "requestDefaultSmsApp" -> {
                     try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             val roleManager = getSystemService(RoleManager::class.java)
                             if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-                                startActivityForResult(intent, 200)
+                                startActivityForResult(roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS), 200)
                                 result.success(true)
                                 return@setMethodCallHandler
                             }
                         }
+
                         val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
                         intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
                         startActivity(intent)
@@ -140,10 +124,99 @@ class MainActivity : FlutterActivity() {
                         result.error("DEFAULT_SMS_ERROR", e.message, null)
                     }
                 }
-                else -> {
-                    result.notImplemented()
-                }
+                else -> result.notImplemented()
             }
         }
+    }
+
+    private fun readSmsMessages(threadId: String? = null, address: String? = null): List<Map<String, Any>> {
+        return try {
+            val messages = mutableListOf<Map<String, Any>>()
+            val uri = Uri.parse("content://sms")
+            val projection = arrayOf(
+                Telephony.Sms._ID,
+                Telephony.Sms.THREAD_ID,
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                Telephony.Sms.TYPE,
+                Telephony.Sms.READ
+            )
+
+            val selection: String?
+            val args: Array<String>?
+            when {
+                !threadId.isNullOrBlank() -> {
+                    selection = "${Telephony.Sms.THREAD_ID} = ?"
+                    args = arrayOf(threadId)
+                }
+                !address.isNullOrBlank() -> {
+                    selection = "${Telephony.Sms.ADDRESS} = ?"
+                    args = arrayOf(address)
+                }
+                else -> {
+                    selection = null
+                    args = null
+                }
+            }
+
+            val order = if (threadId != null || address != null) {
+                "${Telephony.Sms.DATE} ASC"
+            } else {
+                Telephony.Sms.DEFAULT_SORT_ORDER
+            }
+
+            val cursor = contentResolver.query(uri, projection, selection, args, order)
+            cursor?.use {
+                val idCol = it.getColumnIndex(Telephony.Sms._ID)
+                val threadCol = it.getColumnIndex(Telephony.Sms.THREAD_ID)
+                val addressCol = it.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bodyCol = it.getColumnIndex(Telephony.Sms.BODY)
+                val dateCol = it.getColumnIndex(Telephony.Sms.DATE)
+                val typeCol = it.getColumnIndex(Telephony.Sms.TYPE)
+                val readCol = it.getColumnIndex(Telephony.Sms.READ)
+
+                while (it.moveToNext()) {
+                    messages.add(
+                        mapOf(
+                            "id" to if (idCol >= 0) it.getString(idCol) else "",
+                            "threadId" to if (threadCol >= 0) it.getString(threadCol) else "",
+                            "address" to if (addressCol >= 0) (it.getString(addressCol) ?: "Unknown") else "Unknown",
+                            "body" to if (bodyCol >= 0) (it.getString(bodyCol) ?: "") else "",
+                            "date" to if (dateCol >= 0) it.getLong(dateCol) else 0L,
+                            "type" to if (typeCol >= 0) it.getInt(typeCol) else 1,
+                            "read" to if (readCol >= 0) it.getInt(readCol) == 1 else true
+                        )
+                    )
+                }
+            }
+            messages
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun markThreadAsRead(threadId: String? = null, address: String? = null): Int {
+        val uri = Uri.parse("content://sms")
+        val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
+
+        val selection: String?
+        val args: Array<String>?
+        when {
+            !threadId.isNullOrBlank() -> {
+                selection = "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0"
+                args = arrayOf(threadId)
+            }
+            !address.isNullOrBlank() -> {
+                selection = "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.READ} = 0"
+                args = arrayOf(address)
+            }
+            else -> {
+                selection = null
+                args = null
+            }
+        }
+
+        return contentResolver.update(uri, values, selection, args)
     }
 }

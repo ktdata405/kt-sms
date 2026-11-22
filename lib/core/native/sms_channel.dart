@@ -28,8 +28,14 @@ class SmsMessageModel {
       threadId: map['threadId']?.toString() ?? '',
       address: map['address']?.toString() ?? 'Unknown',
       body: map['body']?.toString() ?? '',
-      date: map['date'] is int ? map['date'] : int.tryParse(map['date']?.toString() ?? '0') ?? 0,
-      type: map['type'] is int ? map['type'] : int.tryParse(map['type']?.toString() ?? '1') ?? 1,
+      date:
+          map['date'] is int
+              ? map['date']
+              : int.tryParse(map['date']?.toString() ?? '0') ?? 0,
+      type:
+          map['type'] is int
+              ? map['type']
+              : int.tryParse(map['type']?.toString() ?? '1') ?? 1,
       read: map['read'] == true,
     );
   }
@@ -41,9 +47,13 @@ class SmsChannel {
   static Future<Map<String, String>> getContacts() async {
     if (kIsWeb) return {};
     try {
-      final Map<dynamic, dynamic>? result = await _channel.invokeMethod('getContacts');
+      final Map<dynamic, dynamic>? result = await _channel.invokeMethod(
+        'getContacts',
+      );
       if (result == null) return {};
-      return result.map((key, value) => MapEntry(key.toString(), value.toString()));
+      return result.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
     } catch (e) {
       debugPrint('Error fetching contacts: $e');
       return {};
@@ -77,7 +87,8 @@ class SmsChannel {
           id: '1',
           threadId: 't1',
           address: 'HDFC-BANK',
-          body: 'Your A/C X1234 has been debited by Rs. 15,450.00 on 24-Oct-24 at Amazon. Avail Bal: Rs. 2,45,000.00.',
+          body:
+              'Your A/C X1234 has been debited by Rs. 15,450.00 on 24-Oct-24 at Amazon. Avail Bal: Rs. 2,45,000.00.',
           date: now - 3600000,
           type: 1,
           read: false,
@@ -87,7 +98,8 @@ class SmsChannel {
           id: '2',
           threadId: 't2',
           address: 'CITY-POWER',
-          body: 'Your electricity bill of Rs. 1,250.50 is due on Oct 28, 2024. Please pay online.',
+          body:
+              'Your electricity bill of Rs. 1,250.50 is due on Oct 28, 2024. Please pay online.',
           date: now - 7200000,
           type: 1,
           read: true,
@@ -97,7 +109,8 @@ class SmsChannel {
           id: '3',
           threadId: 't3',
           address: 'GOOGLE',
-          body: 'G-849201 is your Google verification code. Do not share it with anyone.',
+          body:
+              'G-849201 is your Google verification code. Do not share it with anyone.',
           date: now - 10800000,
           type: 1,
           read: false,
@@ -107,7 +120,8 @@ class SmsChannel {
           id: '4',
           threadId: 't4',
           address: 'AMAZON',
-          body: 'Exclusive Offer! Get 50% off on your next purchase using code KT50. Valid till end of month.',
+          body:
+              'Exclusive Offer! Get 50% off on your next purchase using code KT50. Valid till end of month.',
           date: now - 14400000,
           type: 1,
           read: true,
@@ -127,7 +141,9 @@ class SmsChannel {
     }
 
     try {
-      final List<dynamic>? result = await _channel.invokeMethod('getSmsMessages');
+      final List<dynamic>? result = await _channel.invokeMethod(
+        'getSmsMessages',
+      );
       if (result == null) return [];
 
       final contacts = await getContacts();
@@ -135,14 +151,71 @@ class SmsChannel {
       return result.map((item) {
         final msg = SmsMessageModel.fromMap(item as Map<dynamic, dynamic>);
         final cleanAddr = msg.address.replaceAll(RegExp(r'[^0-9+]'), '');
-        final last10 = cleanAddr.length >= 10 ? cleanAddr.substring(cleanAddr.length - 10) : cleanAddr;
+        final last10 =
+            cleanAddr.length >= 10
+                ? cleanAddr.substring(cleanAddr.length - 10)
+                : cleanAddr;
 
-        msg.contactName = contacts[cleanAddr] ?? contacts[last10] ?? msg.address;
+        msg.contactName =
+            contacts[cleanAddr] ?? contacts[last10] ?? msg.address;
         return msg;
       }).toList();
     } catch (e) {
       debugPrint('Error fetching SMS messages: $e');
       return [];
+    }
+  }
+
+  static Future<List<SmsMessageModel>> getThreadMessages({
+    required String threadId,
+    required String address,
+  }) async {
+    if (kIsWeb) return getSmsMessages();
+
+    try {
+      final List<dynamic>? result = await _channel.invokeMethod(
+        'getThreadMessages',
+        {'threadId': threadId, 'address': address},
+      );
+      if (result == null) return [];
+
+      final contacts = await getContacts();
+
+      return result.map((item) {
+        final msg = SmsMessageModel.fromMap(item as Map<dynamic, dynamic>);
+        final cleanAddr = msg.address.replaceAll(RegExp(r'[^0-9+]'), '');
+        final last10 =
+            cleanAddr.length >= 10
+                ? cleanAddr.substring(cleanAddr.length - 10)
+                : cleanAddr;
+        msg.contactName =
+            contacts[cleanAddr] ?? contacts[last10] ?? msg.address;
+        return msg;
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching thread messages: $e');
+      return [];
+    }
+  }
+
+  static Future<bool> markThreadAsRead({
+    String? threadId,
+    String? address,
+  }) async {
+    if (kIsWeb) return true;
+    if ((threadId == null || threadId.isEmpty) &&
+        (address == null || address.isEmpty)) {
+      return false;
+    }
+    try {
+      final bool? result = await _channel.invokeMethod('markThreadAsRead', {
+        'threadId': threadId,
+        'address': address,
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('Error marking SMS as read: $e');
+      return false;
     }
   }
 

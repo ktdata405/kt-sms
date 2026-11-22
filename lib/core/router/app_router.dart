@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/inbox/presentation/inbox_screen.dart';
 import '../../features/transactions/presentation/transactions_screen.dart';
 import '../../features/reminders/presentation/reminders_screen.dart';
-import '../../features/offers/presentation/offers_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> _shellNavigatorKey =
+    GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -23,23 +23,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/inbox',
-            pageBuilder: (context, state) => const NoTransitionPage(child: InboxScreen()),
+            pageBuilder:
+                (context, state) =>
+                    const NoTransitionPage(child: InboxScreen()),
           ),
           GoRoute(
             path: '/transactions',
-            pageBuilder: (context, state) => const NoTransitionPage(child: TransactionsScreen()),
+            pageBuilder:
+                (context, state) =>
+                    const NoTransitionPage(child: TransactionsScreen()),
           ),
           GoRoute(
             path: '/reminders',
-            pageBuilder: (context, state) => const NoTransitionPage(child: RemindersScreen()),
-          ),
-          GoRoute(
-            path: '/offers',
-            pageBuilder: (context, state) => const NoTransitionPage(child: OffersScreen()),
+            pageBuilder:
+                (context, state) =>
+                    const NoTransitionPage(child: RemindersScreen()),
           ),
           GoRoute(
             path: '/settings',
-            pageBuilder: (context, state) => const NoTransitionPage(child: SettingsScreen()),
+            pageBuilder:
+                (context, state) =>
+                    const NoTransitionPage(child: SettingsScreen()),
           ),
         ],
       ),
@@ -57,8 +61,7 @@ class MainLayout extends StatelessWidget {
     if (location.startsWith('/inbox')) return 0;
     if (location.startsWith('/transactions')) return 1;
     if (location.startsWith('/reminders')) return 2;
-    if (location.startsWith('/offers')) return 3;
-    if (location.startsWith('/settings')) return 4;
+    if (location.startsWith('/settings')) return 3;
     return 0;
   }
 
@@ -74,9 +77,6 @@ class MainLayout extends StatelessWidget {
         context.go('/reminders');
         break;
       case 3:
-        context.go('/offers');
-        break;
-      case 4:
         context.go('/settings');
         break;
     }
@@ -106,11 +106,6 @@ class MainLayout extends StatelessWidget {
             icon: Icon(Icons.alarm_outlined),
             selectedIcon: Icon(Icons.alarm),
             label: 'Reminders',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.local_offer_outlined),
-            selectedIcon: Icon(Icons.local_offer),
-            label: 'Offers',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

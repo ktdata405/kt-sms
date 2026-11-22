@@ -17,11 +17,29 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   List<Map<String, dynamic>> _transactions = [];
   double _totalSpent = 0.0;
   double _totalCredited = 0.0;
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadTransactions();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldShow =
+        _scrollController.hasClients && _scrollController.offset > 300;
+    if (shouldShow != _showScrollToTop) {
+      setState(() => _showScrollToTop = shouldShow);
+    }
   }
 
   Future<void> _loadTransactions() async {
@@ -34,8 +52,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
       for (var msg in messages) {
         final classified = SmsClassifier.classify(msg.address, msg.body);
-        if (classified.category == 'Transactions' && classified.amount != null) {
-          final isDebit = msg.body.toLowerCase().contains('debited') ||
+        if (classified.category == 'Transactions' &&
+            classified.amount != null) {
+          final isDebit =
+              msg.body.toLowerCase().contains('debited') ||
               msg.body.toLowerCase().contains('spent');
           if (isDebit) {
             spent += classified.amount!;
@@ -79,7 +99,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         title: const Text('Transactions & Expenses'),
         actions: [
           IconButton(
-            icon: Icon(_isAmountVisible ? Icons.visibility : Icons.visibility_off),
+            icon: Icon(
+              _isAmountVisible ? Icons.visibility : Icons.visibility_off,
+            ),
             onPressed: () {
               setState(() {
                 _isAmountVisible = !_isAmountVisible;
@@ -93,110 +115,169 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Extracted Expenses Summary (INR)', style: theme.textTheme.titleMedium),
-                            IconButton(
-                              icon: Icon(_isAmountVisible ? Icons.visibility : Icons.visibility_off, size: 20),
-                              onPressed: () {
-                                setState(() {
-                                  _isAmountVisible = !_isAmountVisible;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _formatLakh(_totalSpent),
-                          style: theme.textTheme.headlineLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Extracted Expenses Summary (INR)',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  _isAmountVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isAmountVisible = !_isAmountVisible;
+                                  });
+                                },
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Credited', style: TextStyle(color: Colors.green)),
-                                Text(_formatLakh(_totalCredited), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              ],
+                          const SizedBox(height: 8),
+                          Text(
+                            _formatLakh(_totalSpent),
+                            style: theme.textTheme.headlineLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Text('Debited', style: TextStyle(color: Colors.red)),
-                                Text(_formatLakh(_totalSpent), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ],
-                        )
-                      ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Credited',
+                                    style: TextStyle(color: Colors.green),
+                                  ),
+                                  Text(
+                                    _formatLakh(_totalCredited),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'Debited',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                  Text(
+                                    _formatLakh(_totalSpent),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text('Transaction Messages (${_transactions.length})', style: theme.textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (_transactions.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Center(child: Text('No bank or transaction SMS found.')),
-                  )
-                else
-                  ..._transactions.map((tx) {
-                    final isDebit = tx['isDebit'] as bool;
-                    final amount = tx['amount'] as double;
-                    final dateStr = DateFormat('MMM d, yyyy • h:mm a').format(
-                      DateTime.fromMillisecondsSinceEpoch(tx['date'] as int),
-                    );
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isDebit ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
-                          child: Icon(
-                            isDebit ? Icons.arrow_upward : Icons.arrow_downward,
-                            color: isDebit ? Colors.red : Colors.green,
-                          ),
-                        ),
-                        title: Text(tx['address']),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tx['body'], maxLines: 2, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 4),
-                            Text(dateStr, style: theme.textTheme.bodySmall),
-                          ],
-                        ),
-                        trailing: Text(
-                          '${isDebit ? '-' : '+'}${_formatLakh(amount)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isDebit ? Colors.red : Colors.green,
-                          ),
-                        ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Transaction Messages (${_transactions.length})',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_transactions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Center(
+                        child: Text('No bank or transaction SMS found.'),
                       ),
-                    );
-                  }),
-              ],
-            ),
+                    )
+                  else
+                    ..._transactions.map((tx) {
+                      final isDebit = tx['isDebit'] as bool;
+                      final amount = tx['amount'] as double;
+                      final dateStr = DateFormat('MMM d, yyyy • h:mm a').format(
+                        DateTime.fromMillisecondsSinceEpoch(tx['date'] as int),
+                      );
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                isDebit
+                                    ? Colors.red.withValues(alpha: 0.1)
+                                    : Colors.green.withValues(alpha: 0.1),
+                            child: Icon(
+                              isDebit
+                                  ? Icons.arrow_upward
+                                  : Icons.arrow_downward,
+                              color: isDebit ? Colors.red : Colors.green,
+                            ),
+                          ),
+                          title: Text(tx['address']),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tx['body'],
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                dateStr,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: Text(
+                            '${isDebit ? '-' : '+'}${_formatLakh(amount)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDebit ? Colors.red : Colors.green,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
+      floatingActionButton:
+          _showScrollToTop
+              ? FloatingActionButton.small(
+                heroTag: 'transactions-top',
+                onPressed: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                  );
+                },
+                child: const Icon(Icons.vertical_align_top),
+              )
+              : null,
     );
   }
 }
