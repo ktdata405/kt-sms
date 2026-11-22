@@ -27,13 +27,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   ];
 
   bool _isLoading = true;
+  bool _isDefaultSms = true;
   List<SmsMessageModel> _messages = [];
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _checkDefaultSms();
     _loadSmsInbox();
+  }
+
+  Future<void> _checkDefaultSms() async {
+    final isDefault = await SmsChannel.isDefaultSmsApp();
+    setState(() {
+      _isDefaultSms = isDefault;
+    });
   }
 
   Future<void> _loadSmsInbox() async {
@@ -74,11 +83,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Strict filter mapping
     final filteredMessages = _messages.where((msg) {
       if (_selectedFilter == 'All') return true;
       if (_selectedFilter == 'Unread') return !msg.read;
-      if (_selectedFilter == 'Starred') return false; // Starred implementation can be toggled
+      if (_selectedFilter == 'Starred') return false;
 
       final classified = SmsClassifier.classify(msg.address, msg.body);
       return classified.category == _selectedFilter;
@@ -90,14 +98,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadSmsInbox,
+            onPressed: () {
+              _checkDefaultSms();
+              _loadSmsInbox();
+            },
             tooltip: 'Refresh SMS',
           ),
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {
-              // TODO: Global search
-            },
+            onPressed: () {},
           ),
         ],
         bottom: PreferredSize(
@@ -125,111 +134,141 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
-                        const SizedBox(height: 16),
-                        Text(_errorMessage!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _loadSmsInbox,
-                          child: const Text('Grant Permissions & Retry'),
-                        ),
-                      ],
+      body: Column(
+        children: [
+          if (!_isDefaultSms)
+            Container(
+              color: theme.colorScheme.errorContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: theme.colorScheme.onErrorContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'KT-SMS is not your default SMS app.',
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer, fontWeight: FontWeight.bold),
                     ),
                   ),
-                )
-              : filteredMessages.isEmpty
-                  ? const Center(child: Text('No messages found in this category.'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredMessages.length,
-                      itemBuilder: (context, index) {
-                        final msg = filteredMessages[index];
-                        final displayName = msg.contactName ?? msg.address;
-                        final dateStr = DateFormat('MMM d, h:mm a').format(
-                          DateTime.fromMillisecondsSinceEpoch(msg.date),
-                        );
-                        final classified = SmsClassifier.classify(msg.address, msg.body);
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: CircleAvatar(
-                              backgroundColor: theme.colorScheme.primaryContainer,
-                              foregroundColor: theme.colorScheme.onPrimaryContainer,
-                              child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?'),
-                            ),
-                            title: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    displayName,
-                                    style: TextStyle(
-                                      fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.secondaryContainer,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    classified.category,
-                                    style: TextStyle(fontSize: 10, color: theme.colorScheme.onSecondaryContainer),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    msg.body,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(dateStr, style: theme.textTheme.bodySmall),
-                                ],
+                  FilledButton.tonal(
+                    onPressed: () async {
+                      await SmsChannel.requestDefaultSmsApp();
+                      await _checkDefaultSms();
+                    },
+                    child: const Text('Set as Default'),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+                              const SizedBox(height: 16),
+                              Text(_errorMessage!, textAlign: TextAlign.center),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: _loadSmsInbox,
+                                child: const Text('Grant Permissions & Retry'),
                               ),
-                            ),
-                            trailing: Icon(
-                              msg.read ? Icons.done_all : Icons.circle,
-                              size: msg.read ? 20 : 12,
-                              color: msg.read ? theme.colorScheme.primary : theme.colorScheme.error,
-                            ),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => ConversationScreen(
-                                    address: msg.address,
-                                    initialBody: msg.body,
+                            ],
+                          ),
+                        ),
+                      )
+                    : filteredMessages.isEmpty
+                        ? const Center(child: Text('No messages found in this category.'))
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: filteredMessages.length,
+                            itemBuilder: (context, index) {
+                              final msg = filteredMessages[index];
+                              final displayName = msg.contactName ?? msg.address;
+                              final dateStr = DateFormat('MMM d, h:mm a').format(
+                                DateTime.fromMillisecondsSinceEpoch(msg.date),
+                              );
+                              final classified = SmsClassifier.classify(msg.address, msg.body);
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.all(16),
+                                  leading: CircleAvatar(
+                                    backgroundColor: theme.colorScheme.primaryContainer,
+                                    foregroundColor: theme.colorScheme.onPrimaryContainer,
+                                    child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?'),
                                   ),
+                                  title: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          displayName,
+                                          style: TextStyle(
+                                            fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.secondaryContainer,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          classified.category,
+                                          style: TextStyle(fontSize: 10, color: theme.colorScheme.onSecondaryContainer),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          msg.body,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: msg.read ? FontWeight.normal : FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(dateStr, style: theme.textTheme.bodySmall),
+                                      ],
+                                    ),
+                                  ),
+                                  trailing: Icon(
+                                    msg.read ? Icons.done_all : Icons.circle,
+                                    size: msg.read ? 20 : 12,
+                                    color: msg.read ? theme.colorScheme.primary : theme.colorScheme.error,
+                                  ),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => ConversationScreen(
+                                          address: msg.address,
+                                          initialBody: msg.body,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               );
                             },
                           ),
-                        );
-                      },
-                    ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.of(context).push(

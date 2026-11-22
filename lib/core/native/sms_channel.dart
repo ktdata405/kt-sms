@@ -50,6 +50,25 @@ class SmsChannel {
     }
   }
 
+  static Future<bool> isDefaultSmsApp() async {
+    if (kIsWeb) return true;
+    try {
+      final bool? result = await _channel.invokeMethod('isDefaultSmsApp');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<void> requestDefaultSmsApp() async {
+    if (kIsWeb) return;
+    try {
+      await _channel.invokeMethod('requestDefaultSmsApp');
+    } catch (e) {
+      debugPrint('Error requesting default SMS app: $e');
+    }
+  }
+
   static Future<List<SmsMessageModel>> getSmsMessages() async {
     if (kIsWeb) {
       final now = DateTime.now().millisecondsSinceEpoch;

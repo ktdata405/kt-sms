@@ -1,6 +1,7 @@
 package com.ktsms.app.kt_sms
 
 import android.content.ContentValues
+import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.Telephony
@@ -87,7 +88,6 @@ class MainActivity : FlutterActivity() {
                                 val name = it.getString(nameCol) ?: ""
                                 if (number.isNotEmpty() && name.isNotEmpty()) {
                                     contacts[number] = name
-                                    // Also store last 10 digits for matching
                                     if (number.length >= 10) {
                                         contacts[number.takeLast(10)] = name
                                     }
@@ -112,6 +112,21 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGUMENTS", "Address and body cannot be null", null)
+                    }
+                }
+                "isDefaultSmsApp" -> {
+                    val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(context)
+                    val isDefault = defaultSmsPackage == packageName
+                    result.success(isDefault)
+                }
+                "requestDefaultSmsApp" -> {
+                    try {
+                        val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
+                        intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("DEFAULT_SMS_ERROR", e.message, null)
                     }
                 }
                 else -> {
