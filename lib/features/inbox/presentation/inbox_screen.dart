@@ -195,8 +195,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
         builder:
             (context) => ConversationScreen(
               address: thread.address,
-              contactName: thread.contactName,
-              threadId: thread.latestMessage.threadId,
               initialBody: thread.latestMessage.body,
             ),
       ),

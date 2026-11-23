@@ -83,7 +83,27 @@ class MainActivity : FlutterActivity() {
                             SmsManager.getDefault()
                         }
 
-                        smsManager?.sendTextMessage(address.trim(), null, body, null, null)
+                        if (body.length > 160) {
+                            val parts = smsManager?.divideMessage(body)
+                            smsManager?.sendMultipartTextMessage(address.trim(), null, parts, null, null)
+                        } else {
+                            smsManager?.sendTextMessage(address.trim(), null, body, null, null)
+                        }
+
+                        // Insert sent message into system content provider so it shows in conversation history
+                        val values = ContentValues().apply {
+                            put(Telephony.Sms.ADDRESS, address.trim())
+                            put(Telephony.Sms.BODY, body)
+                            put(Telephony.Sms.DATE, System.currentTimeMillis())
+                            put(Telephony.Sms.READ, 1)
+                            put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                        }
+                        try {
+                            contentResolver.insert(Uri.parse("content://sms/sent"), values)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("SMS_SEND_ERROR", e.message, null)
@@ -197,7 +217,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun markThreadAsRead(threadId: String? = null, address: String? = null): Int {
-        val uri = Uri.parse("content://sms")
+        val uri = Uri.parse("content://sms/sent")
         val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
 
         val selection: String?
@@ -217,6 +237,6 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        return contentResolver.update(uri, values, selection, args)
+        return contentResolver.update(Uri.parse("content://sms"), values, selection, args)
     }
 }

@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/native/sms_channel.dart';
+import 'package:intl/intl.dart';
 
 class ConversationScreen extends ConsumerStatefulWidget {
   final String address;
   final String initialBody;
-  final String? threadId;
-  final String? contactName;
 
   const ConversationScreen({
     super.key,
     required this.address,
     required this.initialBody,
-    this.threadId,
-    this.contactName,
   });
 
   @override
@@ -24,96 +20,118 @@ class ConversationScreen extends ConsumerStatefulWidget {
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   late final TextEditingController _addressController;
   late final TextEditingController _messageController;
-  final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
-  bool _isLoading = false;
+  bool _isLoadingHistory = false;
   List<SmsMessageModel> _messages = [];
+  Map<String, String> _contactsMap = {};
+  List<MapEntry<String, String>> _filteredContacts = [];
+  bool _showContactSuggestions = false;
 
   @override
   void initState() {
     super.initState();
     _addressController = TextEditingController(text: widget.address);
     _messageController = TextEditingController();
-    if (widget.address.isNotEmpty || (widget.threadId?.isNotEmpty ?? false)) {
-      _loadConversation();
-      _markThreadAsRead();
+
+    if (widget.address.isNotEmpty) {
+      _loadChatHistory(widget.address);
     }
+
+    _loadContacts();
+
+    _addressController.addListener(_onAddressChanged);
   }
 
   @override
   void dispose() {
+    _addressController.removeListener(_onAddressChanged);
     _addressController.dispose();
     _messageController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadConversation() async {
-    setState(() => _isLoading = true);
-    try {
-      final messages = await SmsChannel.getThreadMessages(
-        threadId: widget.threadId ?? '',
-        address: widget.address,
-      );
-      if (!mounted) return;
+  Future<void> _loadContacts() async {
+    final contacts = await SmsChannel.getContacts();
+    if (mounted) {
       setState(() {
-        _messages = messages;
-        _isLoading = false;
+        _contactsMap = contacts;
       });
-      _jumpToBottom();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _markThreadAsRead() async {
-    await SmsChannel.markThreadAsRead(
-      threadId: widget.threadId,
-      address: widget.address,
-    );
-  }
+  void _onAddressChanged() {
+    final query = _addressController.text.trim().toLowerCase();
+    if (query.isEmpty) {
+      setState(() {
+        _filteredContacts = [];
+        _showContactSuggestions = false;
+      });
+      return;
+    }
 
-  void _jumpToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+    final matches = _contactsMap.entries.where((entry) {
+      final name = entry.value.toLowerCase();
+      final number = entry.key.toLowerCase();
+      return name.contains(query) || number.contains(query);
+    }).toList();
+
+    setState(() {
+      _filteredContacts = matches;
+      _showContactSuggestions = matches.isNotEmpty;
     });
   }
 
+  Future<void> _loadChatHistory(String address) async {
+    setState(() => _isLoadingHistory = true);
+    try {
+      final history = await SmsChannel.getThreadMessages(threadId: '', address: address);
+      if (mounted) {
+        setState(() {
+          _messages = history;
+          _isLoadingHistory = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingHistory = false);
+      }
+    }
+  }
+
   Future<void> _sendSms() async {
-    final enteredAddress = _addressController.text.trim();
+    final address = _addressController.text.trim();
     final body = _messageController.text.trim();
-    final address = enteredAddress.isNotEmpty ? enteredAddress : widget.address;
 
     if (address.isEmpty || body.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter recipient and message body'),
-        ),
+        const SnackBar(content: Text('Please enter recipient and message body')),
       );
       return;
     }
 
-    setState(() => _isSending = true);
+    setState(() {
+      _isSending = true;
+    });
+
     final success = await SmsChannel.sendSms(address, body);
+
     if (!mounted) return;
-    setState(() => _isSending = false);
+
+    setState(() {
+      _isSending = false;
+    });
 
     if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SMS sent successfully')),
+      );
       _messageController.clear();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('SMS sent successfully')));
-      await _loadConversation();
+      // Reload history for this address
+      _loadChatHistory(address);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to send SMS')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send SMS')),
+      );
     }
   }
 
@@ -121,168 +139,174 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isNew = widget.address.isEmpty;
-    final titleText =
-        widget.contactName?.trim().isNotEmpty == true
-            ? widget.contactName!.trim()
-            : (widget.address.isNotEmpty ? widget.address : 'New message');
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            isNew
-                ? TextField(
-                  controller: _addressController,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter phone number or contact',
-                    border: InputBorder.none,
-                  ),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                )
-                : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(titleText),
-                    if ((widget.contactName?.isNotEmpty ?? false) &&
-                        widget.address.isNotEmpty)
-                      Text(
-                        widget.address,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                  ],
+        title: isNew
+            ? TextField(
+                controller: _addressController,
+                decoration: const InputDecoration(
+                  hintText: 'Type contact name or number...',
+                  border: InputBorder.none,
                 ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              )
+            : Text(_contactsMap[widget.address] ?? widget.address),
         actions: [
           IconButton(
             icon: const Icon(Icons.call),
-            onPressed: isNew ? null : () {},
+            onPressed: widget.address.isEmpty ? null : () {},
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadConversation,
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {},
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child:
-                _isLoading
+          Column(
+            children: [
+              Expanded(
+                child: _isLoadingHistory
                     ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                      itemCount:
-                          _messages.isEmpty && widget.initialBody.isNotEmpty
-                              ? 1
-                              : _messages.length,
-                      itemBuilder: (context, index) {
-                        if (_messages.isEmpty &&
-                            widget.initialBody.isNotEmpty) {
-                          return Align(
-                            alignment: Alignment.centerLeft,
-                            child: _bubble(
-                              context,
-                              body: widget.initialBody,
-                              date: null,
-                              isOutgoing: false,
+                    : _messages.isEmpty
+                        ? Center(
+                            child: Text(
+                              isNew ? 'Search or select a contact to start messaging' : 'No previous chat history found.',
+                              style: theme.textTheme.bodyMedium,
                             ),
-                          );
-                        }
-                        final msg = _messages[index];
-                        final isOutgoing = msg.type == 2;
-                        final date = DateTime.fromMillisecondsSinceEpoch(
-                          msg.date,
-                        );
-                        return Align(
-                          alignment:
-                              isOutgoing
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                          child: _bubble(
-                            context,
-                            body: msg.body,
-                            date: date,
-                            isOutgoing: isOutgoing,
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              final msg = _messages[index];
+                              final isIncoming = msg.type == 1;
+                              final timeStr = DateFormat('MMM d, h:mm a').format(
+                                DateTime.fromMillisecondsSinceEpoch(msg.date),
+                              );
+
+                              return Align(
+                                alignment: isIncoming ? Alignment.centerLeft : Alignment.centerRight,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(12),
+                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                                  decoration: BoxDecoration(
+                                    color: isIncoming
+                                        ? theme.colorScheme.surfaceContainerHighest
+                                        : theme.colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        msg.body,
+                                        style: TextStyle(
+                                          color: isIncoming
+                                              ? theme.colorScheme.onSurfaceVariant
+                                              : theme.colorScheme.onPrimaryContainer,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        timeStr,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: (isIncoming
+                                                  ? theme.colorScheme.onSurfaceVariant
+                                                  : theme.colorScheme.onPrimaryContainer)
+                                              .withValues(alpha: 0.7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
+              ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                color: theme.cardColor,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () {},
                     ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: const InputDecoration(
+                          hintText: 'Type a message...',
+                          border: InputBorder.none,
+                        ),
+                        maxLines: 4,
+                        minLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      mini: true,
+                      onPressed: _isSending ? null : _sendSms,
+                      child: _isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            color: theme.cardColor,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      hintText: 'Type a message...',
-                      border: InputBorder.none,
-                    ),
-                    maxLines: 4,
-                    minLines: 1,
+          if (_showContactSuggestions)
+            Positioned(
+              top: 0,
+              left: 16,
+              right: 16,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.dividerColor),
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _filteredContacts.length,
+                    itemBuilder: (context, index) {
+                      final contact = _filteredContacts[index];
+                      final name = contact.value;
+                      final number = contact.key;
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
+                        ),
+                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(number),
+                        onTap: () {
+                          _addressController.text = number;
+                          setState(() {
+                            _showContactSuggestions = false;
+                          });
+                          _loadChatHistory(number);
+                        },
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 8),
-                FloatingActionButton(
-                  mini: true,
-                  onPressed: _isSending ? null : _sendSms,
-                  child:
-                      _isSending
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.send),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _bubble(
-    BuildContext context, {
-    required String body,
-    required DateTime? date,
-    required bool isOutgoing,
-  }) {
-    final theme = Theme.of(context);
-    final bubbleColor =
-        isOutgoing
-            ? theme.colorScheme.primaryContainer
-            : theme.colorScheme.surfaceContainerHighest;
-    final dateText =
-        date != null ? DateFormat('MMM d, h:mm a').format(date) : '';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width * 0.78,
-      ),
-      decoration: BoxDecoration(
-        color: bubbleColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(body),
-          if (dateText.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              dateText,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.primary,
               ),
             ),
-          ],
         ],
       ),
     );

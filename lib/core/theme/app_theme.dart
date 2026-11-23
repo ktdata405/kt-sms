@@ -253,13 +253,15 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
         trackColor: WidgetStateProperty.resolveWith<Color>((states) {
-          if (states.contains(WidgetState.selected))
+          if (states.contains(WidgetState.selected)) {
             return const Color(0xFF8EA8FF);
+          }
           return const Color(0xFF3C475E);
         }),
         thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
-          if (states.contains(WidgetState.selected))
+          if (states.contains(WidgetState.selected)) {
             return const Color(0xFF1B2538);
+          }
           return const Color(0xFF9BA6BE);
         }),
       ),

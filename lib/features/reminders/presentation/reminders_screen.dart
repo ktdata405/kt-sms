@@ -218,10 +218,6 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                               (context) => ConversationScreen(
                                                 address:
                                                     rem['address'] as String,
-                                                contactName:
-                                                    rem['sender'] as String,
-                                                threadId:
-                                                    rem['threadId'] as String?,
                                                 initialBody:
                                                     rem['body'] as String,
                                               ),
