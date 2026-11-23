@@ -8,7 +8,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: KtSmsApp()));
 
     // Verify app title / header
-    expect(find.text('KT - SMS Organizer'), findsOneWidget);
+    expect(find.text('KT-SMS'), findsOneWidget);
 
     // Verify bottom navigation items exist
     expect(find.text('Inbox'), findsAtLeastNWidgets(1));

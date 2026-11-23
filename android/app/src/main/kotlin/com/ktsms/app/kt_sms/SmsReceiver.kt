@@ -2,6 +2,7 @@ package com.ktsms.app.kt_sms
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
@@ -28,16 +29,30 @@ class SmsReceiver : BroadcastReceiver() {
                     put(Telephony.Sms.READ, 0)
                     put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
                 }
+                var insertedUri: android.net.Uri? = null
                 try {
-                    context.contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
+                    insertedUri = context.contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
 
                 val senderName = getContactName(context, address)
-                showNotification(context, senderName, body)
+                val isOtp = isOtpMessage(body)
+                val otpCode = if (isOtp) extractOtp(body) else null
+
+                showNotification(context, senderName, address, body, isOtp, otpCode, insertedUri?.lastPathSegment)
             }
         }
+    }
+
+    private fun isOtpMessage(body: String): Boolean {
+        val lower = body.lowercase()
+        return lower.contains("otp") || lower.contains("verification code") || lower.contains("one-time password") || lower.contains("security code")
+    }
+
+    private fun extractOtp(body: String): String? {
+        val regex = Regex("\\b\\d{4,8}\\b")
+        return regex.find(body)?.value
     }
 
     private fun getContactName(context: Context, address: String): String {
@@ -85,7 +100,15 @@ class SmsReceiver : BroadcastReceiver() {
         return cleaned
     }
 
-    private fun showNotification(context: Context, sender: String, body: String) {
+    private fun showNotification(
+        context: Context,
+        senderName: String,
+        address: String,
+        body: String,
+        isOtp: Boolean,
+        otpCode: String?,
+        msgId: String?
+    ) {
         val channelId = "kt_sms_incoming"
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -96,12 +119,66 @@ class SmsReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
 
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra("sender_address", address)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingOpenIntent = PendingIntent.getActivity(
+            context,
+            System.currentTimeMillis().toInt(),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.sym_action_chat)
-            .setContentTitle("New message from $sender")
+            .setContentTitle(senderName)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setContentIntent(pendingOpenIntent)
+
+        if (isOtp && otpCode != null) {
+            val deleteIntent = Intent(context, SmsActionReceiver::class.java).apply {
+                action = "ACTION_DELETE_SMS"
+                putExtra("msg_id", msgId)
+            }
+            val pendingDelete = PendingIntent.getBroadcast(
+                context,
+                System.currentTimeMillis().toInt() + 1,
+                deleteIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            builder.addAction(android.R.drawable.ic_menu_view, "Copy OTP ($otpCode)", pendingOpenIntent)
+            builder.addAction(android.R.drawable.ic_menu_delete, "Delete", pendingDelete)
+        } else {
+            val readIntent = Intent(context, SmsActionReceiver::class.java).apply {
+                action = "ACTION_MARK_READ"
+                putExtra("address", address)
+            }
+            val pendingRead = PendingIntent.getBroadcast(
+                context,
+                System.currentTimeMillis().toInt() + 2,
+                readIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val deleteIntent = Intent(context, SmsActionReceiver::class.java).apply {
+                action = "ACTION_DELETE_SMS"
+                putExtra("msg_id", msgId)
+            }
+            val pendingDelete = PendingIntent.getBroadcast(
+                context,
+                System.currentTimeMillis().toInt() + 3,
+                deleteIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            builder.addAction(android.R.drawable.ic_menu_agenda, "Mark as Read", pendingRead)
+            builder.addAction(android.R.drawable.ic_menu_delete, "Delete", pendingDelete)
+        }
 
         notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
     }

@@ -49,6 +49,9 @@
             </intent-filter>
         </receiver>
 
+        <!-- BroadcastReceiver for notification actions -->
+        <receiver android:name=".SmsActionReceiver" android:exported="false" />
+
         <!-- BroadcastReceiver for incoming MMS -->
         <receiver android:name=".MmsReceiver"
             android:permission="android.permission.BROADCAST_WAP_PUSH"
