@@ -26,6 +26,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Map<String, String> _contactsMap = {};
   List<MapEntry<String, String>> _filteredContacts = [];
   bool _showContactSuggestions = false;
+  String? _selectedContactName;
 
   @override
   void initState() {
@@ -55,13 +56,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (mounted) {
       setState(() {
         _contactsMap = contacts;
+        if (widget.address.isNotEmpty) {
+          final normAddr = SmsChannel.normalizeNumber(widget.address);
+          _selectedContactName = contacts[normAddr] ?? contacts[widget.address];
+        }
       });
     }
   }
 
   void _onAddressChanged() {
     final query = _addressController.text.trim().toLowerCase();
-    if (query.isEmpty) {
+    if (query.isEmpty || _selectedContactName != null && _addressController.text == widget.address) {
       setState(() {
         _filteredContacts = [];
         _showContactSuggestions = false;
@@ -126,7 +131,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         const SnackBar(content: Text('SMS sent successfully')),
       );
       _messageController.clear();
-      // Reload history for this address
       _loadChatHistory(address);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,10 +143,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isNew = widget.address.isEmpty;
+    final resolvedTitle = widget.address.isNotEmpty
+        ? (_selectedContactName ?? _contactsMap[SmsChannel.normalizeNumber(widget.address)] ?? _contactsMap[widget.address] ?? widget.address)
+        : (_selectedContactName ?? 'New Message');
 
     return Scaffold(
       appBar: AppBar(
-        title: isNew
+        title: isNew && _selectedContactName == null
             ? TextField(
                 controller: _addressController,
                 decoration: const InputDecoration(
@@ -151,11 +158,31 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 ),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               )
-            : Text(_contactsMap[widget.address] ?? widget.address),
+            : Row(
+                children: [
+                  Text(resolvedTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (isNew && _selectedContactName != null) ...[
+                    const SizedBox(width: 8),
+                    Text('(${_addressController.text})', style: theme.textTheme.bodySmall),
+                  ],
+                ],
+              ),
         actions: [
+          if (isNew && _selectedContactName != null)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () {
+                setState(() {
+                  _selectedContactName = null;
+                  _addressController.clear();
+                  _messages = [];
+                });
+              },
+              tooltip: 'Change Recipient',
+            ),
           IconButton(
             icon: const Icon(Icons.call),
-            onPressed: widget.address.isEmpty ? null : () {},
+            onPressed: widget.address.isEmpty && _selectedContactName == null ? null : () {},
           ),
           IconButton(
             icon: const Icon(Icons.more_vert),
@@ -173,7 +200,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     : _messages.isEmpty
                         ? Center(
                             child: Text(
-                              isNew ? 'Search or select a contact to start messaging' : 'No previous chat history found.',
+                              isNew && _selectedContactName == null
+                                  ? 'Search or select a contact to start messaging'
+                                  : 'No previous chat history found.',
                               style: theme.textTheme.bodyMedium,
                             ),
                           )
@@ -298,6 +327,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                           _addressController.text = number;
                           setState(() {
                             _showContactSuggestions = false;
+                            _selectedContactName = name;
                           });
                           _loadChatHistory(number);
                         },

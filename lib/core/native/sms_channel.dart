@@ -44,6 +44,17 @@ class SmsMessageModel {
 class SmsChannel {
   static const MethodChannel _channel = MethodChannel('com.ktsms.app/sms');
 
+  static String normalizeNumber(String raw) {
+    final cleaned = raw.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (cleaned.isEmpty || !cleaned.contains(RegExp(r'[0-9]'))) {
+      return raw.toUpperCase();
+    }
+    if (cleaned.length >= 10) {
+      return cleaned.substring(cleaned.length - 10);
+    }
+    return cleaned;
+  }
+
   static Future<Map<String, String>> getContacts() async {
     if (kIsWeb) return {};
     try {
@@ -51,9 +62,14 @@ class SmsChannel {
         'getContacts',
       );
       if (result == null) return {};
-      return result.map(
-        (key, value) => MapEntry(key.toString(), value.toString()),
-      );
+
+      final Map<String, String> normalizedContacts = {};
+      result.forEach((key, value) {
+        final normKey = normalizeNumber(key.toString());
+        normalizedContacts[normKey] = value.toString();
+        normalizedContacts[key.toString()] = value.toString();
+      });
+      return normalizedContacts;
     } catch (e) {
       debugPrint('Error fetching contacts: $e');
       return {};
@@ -150,14 +166,10 @@ class SmsChannel {
 
       return result.map((item) {
         final msg = SmsMessageModel.fromMap(item as Map<dynamic, dynamic>);
-        final cleanAddr = msg.address.replaceAll(RegExp(r'[^0-9+]'), '');
-        final last10 =
-            cleanAddr.length >= 10
-                ? cleanAddr.substring(cleanAddr.length - 10)
-                : cleanAddr;
+        final normAddr = normalizeNumber(msg.address);
 
         msg.contactName =
-            contacts[cleanAddr] ?? contacts[last10] ?? msg.address;
+            contacts[normAddr] ?? contacts[msg.address] ?? msg.address;
         return msg;
       }).toList();
     } catch (e) {
@@ -183,13 +195,9 @@ class SmsChannel {
 
       return result.map((item) {
         final msg = SmsMessageModel.fromMap(item as Map<dynamic, dynamic>);
-        final cleanAddr = msg.address.replaceAll(RegExp(r'[^0-9+]'), '');
-        final last10 =
-            cleanAddr.length >= 10
-                ? cleanAddr.substring(cleanAddr.length - 10)
-                : cleanAddr;
+        final normAddr = normalizeNumber(msg.address);
         msg.contactName =
-            contacts[cleanAddr] ?? contacts[last10] ?? msg.address;
+            contacts[normAddr] ?? contacts[msg.address] ?? msg.address;
         return msg;
       }).toList();
     } catch (e) {
